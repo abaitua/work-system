@@ -79,7 +79,17 @@ app.get('/api/getAllData', async (req, res) => {
   }
 });
 
-// 保存工时
+// 读取单人员工所有日期数据
+app.get('/api/getStaffWork/:staffId', async (req, res) => {
+  try {
+    const data = await readData();
+    res.json(data.workData[req.params.staffId] || {});
+  } catch {
+    res.json({});
+  }
+});
+
+// 保存指定日期工时
 app.post('/api/saveWorkData', async (req, res) => {
   try {
     const data = await readData();
@@ -90,16 +100,6 @@ app.post('/api/saveWorkData', async (req, res) => {
     res.json({ code: 0, msg: "保存成功" });
   } catch {
     res.json({ code: -1, msg: "保存失败" });
-  }
-});
-
-// 读取单人员工工时
-app.get('/api/getStaffWork/:staffId', async (req, res) => {
-  try {
-    const data = await readData();
-    res.json(data.workData[req.params.staffId] || {});
-  } catch {
-    res.json({});
   }
 });
 
@@ -134,7 +134,7 @@ app.delete('/api/delStaff/:id', async (req, res) => {
   }
 });
 
-// ===================== 新增：管理员批量删除工时接口 =====================
+// 管理员批量删除年月数据
 app.post('/api/admin/batchDeleteWork', async (req, res) => {
   try {
     const { username, pwd, staffId, year, month } = req.body;
@@ -142,28 +142,21 @@ app.post('/api/admin/batchDeleteWork', async (req, res) => {
     if (data.admin.username !== username || data.admin.pwd !== pwd) {
       return res.json({ code: 1, msg: "权限校验失败" });
     }
+    const prefix = `${year}-${String(month).padStart(2, '0')}`;
     if (staffId) {
+      // 删除单个员工指定年月
       if (data.workData[staffId]) {
-        if (year && month) {
-          const prefix = `${year}-${String(month).padStart(2, '0')}`;
-          Object.keys(data.workData[staffId]).forEach(key => {
-            if (key.startsWith(prefix)) delete data.workData[staffId][key];
-          });
-        } else {
-          data.workData[staffId] = {};
-        }
+        Object.keys(data.workData[staffId]).forEach(key => {
+          if (key.startsWith(prefix)) delete data.workData[staffId][key];
+        });
       }
     } else {
-      if (year && month) {
-        const prefix = `${year}-${String(month).padStart(2, '0')}`;
-        Object.values(data.workData).forEach(person => {
-          Object.keys(person).forEach(key => {
-            if (key.startsWith(prefix)) delete person[key];
-          });
+      // 删除全部员工指定年月
+      Object.values(data.workData).forEach(person => {
+        Object.keys(person).forEach(key => {
+          if (key.startsWith(prefix)) delete person[key];
         });
-      } else {
-        data.workData = {};
-      }
+      });
     }
     await writeData(data);
     res.json({ code: 0, msg: "数据删除成功" });
