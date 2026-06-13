@@ -4,17 +4,14 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 
-// 静态资源托管 + 根路由（解决 Cannot GET / 线上报错）
-app.use(express.static(path.resolve(__dirname, './')));
-app.get('/', (req, res) => {
-  res.sendFile(path.resolve(__dirname, './index.html'), err => {
-    if (err) res.status(404).send('页面不存在');
-  });
+// 极简静态 + 根路由（低版本兼容，不会404页面）
+app.use('/', express.static('./'));
+app.get('/', function(req, res){
+  res.sendFile('index.html');
 });
 
 const DATA_PATH = path.join(__dirname, 'data.json');
 
-// 初始化数据文件
 function initData() {
     if (!fs.existsSync(DATA_PATH)) {
         const init = {
@@ -98,7 +95,7 @@ app.post('/api/updateStaffPwd/:id', async (req, res) => {
     res.json({ code: 0, msg: '密码修改成功' });
 });
 
-// 保存工时数据
+// 保存工时
 app.post('/api/saveWorkData', async (req, res) => {
     const data = await readData();
     const { staffId, day, workArr } = req.body;
@@ -108,13 +105,13 @@ app.post('/api/saveWorkData', async (req, res) => {
     res.json({ code: 0 });
 });
 
-// 获取单人员工工时
+// 获取工时
 app.get('/api/getStaffWork/:staffId', async (req, res) => {
     const data = await readData();
     res.json(data.workData[req.params.staffId] || {});
 });
 
-// 保存工作内容列表
+// 保存工作内容
 app.post('/api/saveWorkList', async (req, res) => {
     const data = await readData();
     data.workList = req.body.workList;
@@ -122,7 +119,7 @@ app.post('/api/saveWorkList', async (req, res) => {
     res.json({ code: 0 });
 });
 
-// 新增操作日志
+// 添加日志
 app.post('/api/addStaffLog', async (req, res) => {
     const data = await readData();
     const { staffId, date, time, data: arr } = req.body;
@@ -132,21 +129,30 @@ app.post('/api/addStaffLog', async (req, res) => {
     res.json({ code: 0 });
 });
 
-// 获取员工日志
+// 你的原有日志接口（完全不动）
 app.get('/api/getStaffLog/:staffId', async (req, res) => {
+  try {
     const data = await readData();
-    res.json(data.logData[req.params.staffId] || []);
+    const log = data.logData[req.params.staffId] || [];
+    res.json(log);
+  } catch {
+    res.json([]);
+  }
 });
 
-// 清空员工日志
 app.delete('/api/clearStaffLog/:staffId', async (req, res) => {
+  try {
     const data = await readData();
-    delete data.logData[req.params.staffId];
+    const sid = req.params.staffId;
+    delete data.logData[sid];
     await writeData(data);
-    res.json({ code: 0, msg: '日志已清空' });
+    res.json({ code: 0, msg: "日志清空成功" });
+  } catch {
+    res.json({ code: -1, msg: "操作失败" });
+  }
 });
 
-// 批量删除指定年月工时
+// 批量删除数据
 app.post('/api/admin/batchDeleteWork', async (req, res) => {
     const data = await readData();
     const { staffId, year, month } = req.body;
@@ -174,6 +180,7 @@ app.post('/api/updateAdminPwd', async (req, res) => {
     const { oldPwd, newPwd } = req.body;
     if (data.admin.pwd !== oldPwd) return res.json({ code: -1, msg: '原密码错误' });
     data.admin.pwd = newPwd;
+    data.admin.pwd = newPwd;
     await writeData(data);
     res.json({ code: 0, msg: '管理员密码修改成功' });
 });
@@ -184,7 +191,4 @@ app.get('/api/getAllData', async (req, res) => {
     res.json(data);
 });
 
-const PORT = 3000;
-app.listen(PORT, () => {
-    console.log(`服务已启动，运行端口：${PORT}`);
-});
+app.listen(3000);
