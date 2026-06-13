@@ -3,7 +3,7 @@ const { Redis } = require('@upstash/redis');
 const path = require('path');
 const app = express();
 
-// 初始化Redis，捕获初始化异常
+// 初始化Redis
 let redis = null;
 try {
   redis = Redis.fromEnv();
@@ -15,33 +15,33 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '..')));
 
 const DATA_KEY = "work_system_data";
-const WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
-
-// 默认兜底数据（Redis挂了也能临时访问）
 const DEFAULT_DATA = {
   admin: { username: "admin", pwd: "123456" },
   staffList: [],
   workData: {}
 };
 
+// 初始化默认数据
 async function initDefaultData() {
   if (!redis) return DEFAULT_DATA;
   await redis.set(DATA_KEY, DEFAULT_DATA);
   return DEFAULT_DATA;
 }
 
+// 读取数据
 async function readData() {
   if (!redis) return DEFAULT_DATA;
   let data = await redis.get(DATA_KEY);
   return data || await initDefaultData();
 }
 
+// 写入数据
 async function writeData(data) {
   if (!redis) return;
   await redis.set(DATA_KEY, data);
 }
 
-// 首页
+// 首页路由
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
@@ -51,11 +51,9 @@ app.post('/api/admin/login', async (req, res) => {
   try {
     const data = await readData();
     const { username, pwd } = req.body;
-    if (data.admin.username === username && data.admin.pwd === pwd) {
-      res.json({ code: 0, msg: "登录成功" });
-    } else {
-      res.json({ code: 1, msg: "账号或密码错误" });
-    }
+    res.json(data.admin.username === username && data.admin.pwd === pwd
+      ? { code: 0, msg: "登录成功" }
+      : { code: 1, msg: "账号或密码错误" });
   } catch {
     res.json({ code: -1, msg: "服务异常" });
   }
@@ -67,11 +65,9 @@ app.post('/api/staff/login', async (req, res) => {
     const data = await readData();
     const { name, pwd } = req.body;
     const user = data.staffList.find(item => item.name === name && item.pwd === pwd);
-    if (user) {
-      res.json({ code: 0, msg: "登录成功", id: user.id, name: user.name });
-    } else {
-      res.json({ code: 1, msg: "账号或密码错误" });
-    }
+    res.json(user
+      ? { code: 0, msg: "登录成功", id: user.id, name: user.name }
+      : { code: 1, msg: "账号或密码错误" });
   } catch {
     res.json({ code: -1, msg: "服务异常" });
   }
@@ -87,7 +83,7 @@ app.get('/api/getAllData', async (req, res) => {
   }
 });
 
-// 保存工时
+// 保存工时数据
 app.post('/api/saveWorkData', async (req, res) => {
   try {
     const data = await readData();
@@ -101,7 +97,7 @@ app.post('/api/saveWorkData', async (req, res) => {
   }
 });
 
-// 读取单人工时
+// 读取单人员工工时
 app.get('/api/getStaffWork/:staffId', async (req, res) => {
   try {
     const data = await readData();
@@ -139,6 +135,50 @@ app.delete('/api/delStaff/:id', async (req, res) => {
     res.json({ code: 0, msg: "删除成功" });
   } catch {
     res.json({ code: -1, msg: "删除失败" });
+  }
+});
+
+// 管理员批量删除工时数据（清理存储）
+app.post('/api/admin/batchDeleteWork', async (req, res) => {
+  try {
+    const { username, pwd, staffId, year, month } = req.body;
+    const data = await readData();
+    // 校验管理员权限
+    if (data.admin.username !== username || data.admin.pwd !== pwd) {
+      return res.json({ code: 1, msg: "管理员权限验证失败" });
+    }
+
+    // 按条件删除
+    if (staffId) {
+      // 删除指定员工数据
+      if (data.workData[staffId]) {
+        if (year && month) {
+          const prefix = `${year}-${String(month).padStart(2, '0')}`;
+          Object.keys(data.workData[staffId]).forEach(key => {
+            if (key.startsWith(prefix)) delete data.workData[staffId][key];
+          });
+        } else {
+          data.workData[staffId] = {};
+        }
+      }
+    } else {
+      // 删除全部员工数据
+      if (year && month) {
+        const prefix = `${year}-${String(month).padStart(2, '0')}`;
+        Object.values(data.workData).forEach(person => {
+          Object.keys(person).forEach(key => {
+            if (key.startsWith(prefix)) delete person[key];
+          });
+        });
+      } else {
+        data.workData = {};
+      }
+    }
+
+    await writeData(data);
+    res.json({ code: 0, msg: "数据删除成功" });
+  } catch (err) {
+    res.json({ code: -1, msg: "数据删除失败" });
   }
 });
 
