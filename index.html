@@ -9,7 +9,6 @@
         body{background:#f5f7fa;padding:20px;}
         .container{max-width:1200px;margin:0 auto;background:#fff;padding:25px;border-radius:8px;box-shadow:0 2px 10px #ddd;}
         h2{text-align:center;margin-bottom:25px;color:#333;}
-        h3{margin:15px 0;color:#444;}
         .btn{padding:8px 16px;background:#409eff;color:#fff;border:none;border-radius:4px;cursor:pointer;margin:5px;}
         .btn:hover{background:#66b1ff;}
         .btn-danger{background:#f56c6c;}
@@ -22,16 +21,17 @@
         .login-item input{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;}
         .tab{margin:20px 0;text-align:center;}
         .tab button{margin:0 10px;}
+        .date-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin:20px 0;}
+        .date-item{border:1px solid #eee;padding:12px;border-radius:6px;text-align:center;cursor:pointer;}
+        .date-item:hover{background:#f0f7ff;}
         table{width:100%;border-collapse:collapse;margin:20px 0;}
         th,td{border:1px solid #ccc;padding:10px;text-align:center;}
         th{background:#f8f9fa;}
         input[type="number"]{width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;}
         .hide{display:none;}
         .split{margin:30px 0;border-top:1px solid #eee;}
-        .select-row{margin:20px 0;gap:10px;display:flex;flex-wrap:wrap;align-items:center;}
+        .select-row{margin:20px 0;text-align:center;gap:10px;display:flex;justify-content:center;flex-wrap:wrap;}
         .select-row select{padding:8px;border:1px solid #ccc;border-radius:4px;min-width:100px;}
-        .item-list{margin:10px 0;padding:10px;border:1px solid #eee;}
-        .item-line{margin:6px 0;display:flex;align-items:center;gap:8px;}
     </style>
 </head>
 <body>
@@ -93,37 +93,15 @@
             </thead>
             <tbody id="detailTable"></tbody>
         </table>
-        <button class="btn btn-success" onclick="saveStaffWork()">保存数据</button>
+        <button class="btn btn-success" type="button" onclick="saveStaffWork()">保存数据</button>
     </div>
 
     <div id="pageAdmin" class="hide">
         <h2>管理员后台</h2>
         <button class="btn btn-danger" type="button" onclick="logout()">退出登录</button>
 
-        <!-- 1. 工作内容管理 新增模块 -->
         <div class="split"></div>
-        <h3>一、工作内容管理</h3>
-        <div class="select-row">
-            <input type="text" id="newWorkItem" placeholder="输入新工作内容">
-            <button class="btn btn-success" onclick="addWorkItem()">添加</button>
-        </div>
-        <div id="workItemList" class="item-list"></div>
-
-        <!-- 2. 员工管理 -->
-        <div class="split"></div>
-        <h3>二、员工管理（新增/删除/修改密码）</h3>
-        <div class="login-item" style="max-width:400px;">
-            <label>新员工姓名</label>
-            <input type="text" id="newStaffName">
-            <label>登录密码</label>
-            <input type="password" id="newStaffPwd">
-            <button class="btn btn-success" type="button" onclick="addStaff()" style="margin-top:10px;">新增员工</button>
-        </div>
-        <div id="staffManageList"></div>
-
-        <!-- 3. 修改管理员密码 -->
-        <div class="split"></div>
-        <h3>三、修改管理员密码</h3>
+        <h3>修改管理员密码</h3>
         <div class="login-item" style="max-width:400px;">
             <label>原密码</label>
             <input type="password" id="oldAdminPwd">
@@ -134,10 +112,20 @@
             <button class="btn btn-success" type="button" onclick="updateAdminPwd()" style="margin-top:10px;">保存修改</button>
         </div>
 
-        <!-- 4. 数据清理 -->
         <div class="split"></div>
-        <h3>四、数据清理（释放存储空间）</h3>
-        <div class="select-row">
+        <h3>一、员工管理（新增/删除/查看密码）</h3>
+        <div class="login-item" style="max-width:400px;">
+            <label>新员工姓名</label>
+            <input type="text" id="newStaffName">
+            <label>登录密码</label>
+            <input type="password" id="newStaffPwd">
+            <button class="btn btn-success" type="button" onclick="addStaff()" style="margin-top:10px;">新增员工</button>
+        </div>
+        <div id="staffManageList"></div>
+
+        <div class="split"></div>
+        <h3>数据清理（释放存储空间）</h3>
+        <div class="select-row" style="justify-content:flex-start;">
             <select id="delStaffSel">
                 <option value="">全部员工</option>
             </select>
@@ -146,10 +134,9 @@
             <button class="btn btn-danger" onclick="delMonthData()">删除所选年月数据</button>
         </div>
 
-        <!-- 5. 全员月度工时汇总 -->
         <div class="split"></div>
-        <h3>五、全员月度工时汇总</h3>
-        <div class="select-row">
+        <h3>二、全员月度工时汇总</h3>
+        <div class="select-row" style="justify-content:flex-start;">
             <span>选择查询月份：</span>
             <select id="queryYear"></select>
             <select id="queryMonth"></select>
@@ -159,16 +146,23 @@
             <thead>
                 <tr>
                     <th>人员</th>
-                    <tbody id="totalTh"></tbody>
+                    <th>首件</th>
+                    <th>巡检</th>
+                    <th>入库</th>
+                    <th>出货</th>
+                    <th>外箱标</th>
+                    <th>内箱标</th>
+                    <th>特标</th>
+                    <th>工单打印</th>
+                    <th>核对物料</th>
                 </tr>
             </thead>
             <tbody id="totalTable"></tbody>
         </table>
 
-        <!-- 6. 系统日志 -->
         <div class="split"></div>
-        <h3>六、系统操作日志（仅管理员查看）</h3>
-        <div class="select-row">
+        <h3>三、系统操作日志（仅管理员查看）</h3>
+        <div class="select-row" style="justify-content:flex-start;margin:10px 0;">
             <select id="logStaffSel">
                 <option value="">全部员工</option>
             </select>
@@ -176,11 +170,11 @@
             <button class="btn" onclick="loadLogList()">查询日志</button>
             <button class="btn btn-danger" onclick="clearAllLog()">清空全部日志</button>
         </div>
-        <div>
+        <div style="margin:10px 0;">
             <table>
                 <thead>
                     <tr>
-                        <th>操作时间(中国时区)</th>
+                        <th>操作时间(UTC)</th>
                         <th>操作人</th>
                         <th>操作类型</th>
                         <th>操作详情</th>
@@ -194,7 +188,7 @@
 </div>
 
 <script>
-let workItems = [];
+const WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
 let currStaffId = "";
 let currStaffName = "";
 let currentDateKey = "";
@@ -240,6 +234,7 @@ function initDateSelect() {
     delMonthSel.value = currMonth;
     queryYear.value = currYear;
     queryMonth.value = currMonth;
+    delStaffSel.innerHTML = `<option value="">全部员工</option>`;
 
     yearSel.onchange = () => fillDay(+yearSel.value, +monthSel.value);
     monthSel.onchange = () => fillDay(+yearSel.value, +monthSel.value);
@@ -329,62 +324,6 @@ async function adminLogin() {
     }
 }
 
-// 渲染工作内容列表
-function renderWorkItemList() {
-    const box = document.getElementById("workItemList");
-    box.innerHTML = "";
-    workItems.forEach((item, idx)=>{
-        const line = document.createElement("div");
-        line.className = "item-line";
-        line.innerHTML = `
-            <span>${idx+1}. ${item}</span>
-            <button class="btn btn-danger" onclick="delWorkItem(${idx})">删除</button>
-        `;
-        box.appendChild(line);
-    });
-    // 刷新汇总表头
-    const totalTh = document.getElementById("totalTh");
-    totalTh.innerHTML = "";
-    workItems.forEach(it=>{
-        totalTh.innerHTML += `<th>${it}</th>`;
-    });
-}
-
-// 添加工作内容
-async function addWorkItem() {
-    const itemName = document.getElementById("newWorkItem").value;
-    const adminUser = document.getElementById("adminUser").value;
-    const adminPwd = document.getElementById("adminPwd").value;
-    const res = await fetch("/api/admin/addWorkItem",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({username:adminUser,pwd:adminPwd,itemName})
-    });
-    const json = await res.json();
-    alert(json.msg);
-    if(json.code === 0){
-        document.getElementById("newWorkItem").value = "";
-        await renderAdminPage();
-    }
-}
-
-// 删除工作内容
-async function delWorkItem(idx) {
-    if(!confirm("确定删除该工作内容？")) return;
-    const adminUser = document.getElementById("adminUser").value;
-    const adminPwd = document.getElementById("adminPwd").value;
-    const res = await fetch("/api/admin/delWorkItem",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({username:adminUser,pwd:adminPwd,index:idx})
-    });
-    const json = await res.json();
-    alert(json.msg);
-    if(json.code === 0){
-        await renderAdminPage();
-    }
-}
-
 async function goDetail() {
     currentDateKey = getFormatDate();
     const y = document.getElementById("selYear").value;
@@ -395,10 +334,10 @@ async function goDetail() {
 
     const res = await fetch(`/api/getStaffWork/${currStaffId}`);
     const workData = await res.json();
-    const dayData = workData[currentDateKey] || workItems.map(()=>0);
+    const dayData = workData[currentDateKey] || WORK_LIST.map(()=>0);
     const table = document.getElementById("detailTable");
     table.innerHTML = "";
-    workItems.forEach((name,idx)=>{
+    WORK_LIST.forEach((name,idx)=>{
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td>${name}</td>
@@ -415,7 +354,7 @@ function backToDate() {
 
 async function saveStaffWork() {
     const arr = [];
-    workItems.forEach((_,idx)=>{
+    WORK_LIST.forEach((_,idx)=>{
         const val = document.getElementById("work"+idx).value || 0;
         arr.push(Number(val));
     });
@@ -435,10 +374,6 @@ async function saveStaffWork() {
 async function renderAdminPage() {
     const res = await fetch("/api/getAllData");
     const allData = await res.json();
-    workItems = allData.workItems || [];
-
-    renderWorkItemList();
-
     const staffBox = document.getElementById("staffManageList");
     const delStaffSel = document.getElementById("delStaffSel");
     const logStaffSel = document.getElementById("logStaffSel");
@@ -472,7 +407,7 @@ async function refreshTotalTable(){
     table.innerHTML = "";
 
     allData.staffList.forEach(staff=>{
-        const workSum = workItems.map(()=>0);
+        const workSum = WORK_LIST.map(()=>0);
         const staffData = allData.workData[staff.id] || {};
         Object.entries(staffData).forEach(([dateKey, dayArr])=>{
             if(dateKey.startsWith(prefix)){
@@ -553,7 +488,10 @@ async function updateAdminPwd(){
     const res = await fetch("/api/updateAdminPwd",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({oldPwd, newPwd})
+        body:JSON.stringify({
+            oldPwd: oldPwd,
+            newPwd: newPwd
+        })
     });
     const json = await res.json();
     alert(json.msg);
