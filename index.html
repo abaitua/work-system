@@ -100,7 +100,6 @@
         <h2>管理员后台</h2>
         <button class="btn btn-danger" type="button" onclick="logout()">退出登录</button>
 
-        <!-- 修改管理员密码区域 -->
         <div class="split"></div>
         <h3>修改管理员密码</h3>
         <div class="login-item" style="max-width:400px;">
@@ -161,10 +160,8 @@
             <tbody id="totalTable"></tbody>
         </table>
 
-        <!-- 系统操作日志 + 筛选区域 -->
         <div class="split"></div>
         <h3>三、系统操作日志（仅管理员查看）</h3>
-        <!-- 日志筛选栏 -->
         <div class="select-row" style="justify-content:flex-start;margin:10px 0;">
             <select id="logStaffSel">
                 <option value="">全部员工</option>
@@ -177,7 +174,7 @@
             <table>
                 <thead>
                     <tr>
-                        <th>操作时间</th>
+                        <th>操作时间(UTC)</th>
                         <th>操作人</th>
                         <th>操作类型</th>
                         <th>操作详情</th>
@@ -196,7 +193,6 @@ let currStaffId = "";
 let currStaffName = "";
 let currentDateKey = "";
 
-// 初始化所有下拉框
 function initDateSelect() {
     const now = new Date();
     const currYear = now.getFullYear();
@@ -244,7 +240,6 @@ function initDateSelect() {
     monthSel.onchange = () => fillDay(+yearSel.value, +monthSel.value);
 }
 
-// 格式化日期key
 function getFormatDate() {
     const y = document.getElementById("selYear").value;
     const m = String(document.getElementById("selMonth").value).padStart(2, "0");
@@ -376,7 +371,6 @@ async function saveStaffWork() {
     alert("保存成功");
 }
 
-// 渲染管理员页面
 async function renderAdminPage() {
     const res = await fetch("/api/getAllData");
     const allData = await res.json();
@@ -402,7 +396,6 @@ async function renderAdminPage() {
     loadLogList();
 }
 
-// 按月查询汇总
 async function refreshTotalTable(){
     const qYear = document.getElementById("queryYear").value;
     const qMonth = document.getElementById("queryMonth").value;
@@ -429,7 +422,6 @@ async function refreshTotalTable(){
     });
 }
 
-// 新增员工
 async function addStaff() {
     const name = document.getElementById("newStaffName").value.trim();
     const pwd = document.getElementById("newStaffPwd").value.trim();
@@ -448,7 +440,6 @@ async function addStaff() {
     }
 }
 
-// 删除员工
 async function delStaff(id) {
     if(!confirm("确定删除该员工？数据将一并清除")) return;
     await fetch(`/api/delStaff/${id}`, { method:"DELETE" });
@@ -456,7 +447,6 @@ async function delStaff(id) {
     alert("删除成功");
 }
 
-// 批量删除年月数据
 async function delMonthData(){
     const adminUser = document.getElementById("adminUser").value;
     const adminPwd = document.getElementById("adminPwd").value;
@@ -480,7 +470,6 @@ async function delMonthData(){
     await renderAdminPage();
 }
 
-// 修改管理员密码方法
 async function updateAdminPwd(){
     const oldPwd = document.getElementById("oldAdminPwd").value.trim();
     const newPwd = document.getElementById("newAdminPwd").value.trim();
@@ -513,7 +502,6 @@ async function updateAdminPwd(){
     }
 }
 
-// 修改员工密码
 async function updateStaffPwd(staffId) {
     const newPwd = document.getElementById(`editPwd_${staffId}`).value.trim();
     if(!newPwd) return alert("请输入新密码");
@@ -539,7 +527,6 @@ async function updateStaffPwd(staffId) {
     }
 }
 
-// 加载/筛选日志
 async function loadLogList() {
     const adminUser = document.getElementById("adminUser").value;
     const adminPwd = document.getElementById("adminPwd").value;
@@ -580,7 +567,6 @@ async function loadLogList() {
     });
 }
 
-// 清空全部日志
 async function clearAllLog() {
     if(!confirm("确定清空所有日志？此操作不可恢复！")) return;
     const adminUser = document.getElementById("adminUser").value;
