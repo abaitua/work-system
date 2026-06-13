@@ -15,7 +15,7 @@ app.use(express.static(path.join(__dirname, '..')));
 
 const DATA_KEY = "work_system_data";
 const DEFAULT_DATA = {
-  admin: { username: "admin", pwd: "123456" },
+  admin: { username: "admin", pwd: "shtai.cheng" },
   staffList: [],
   workData: {}
 };
