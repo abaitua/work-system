@@ -13,6 +13,3 @@
     }
   ]
 }
-app.listen(PORT, () => {
-  console.log(`服务启动成功，端口：${PORT}`);
-});
