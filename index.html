@@ -160,6 +160,24 @@
             </thead>
             <tbody id="totalTable"></tbody>
         </table>
+
+        <!-- 新增：系统操作日志区域 -->
+        <div class="split"></div>
+        <h3>三、系统操作日志（仅管理员查看）</h3>
+        <button class="btn btn-danger" onclick="clearAllLog()">清空全部日志</button>
+        <div style="margin:10px 0;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>操作时间</th>
+                        <th>操作人</th>
+                        <th>操作类型</th>
+                        <th>操作详情</th>
+                    </tr>
+                </thead>
+                <tbody id="logTable"></tbody>
+            </table>
+        </div>
     </div>
 </div>
 
@@ -339,7 +357,12 @@ async function saveStaffWork() {
     await fetch("/api/saveWorkData", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({staffId:currStaffId, day:currentDateKey, workArr:arr})
+        body:JSON.stringify({
+            staffId:currStaffId,
+            day:currentDateKey,
+            workArr:arr,
+            staffName: currStaffName
+        })
     });
     alert("保存成功");
 }
@@ -357,11 +380,14 @@ async function renderAdminPage() {
         delStaffSel.innerHTML += `<option value="${staff.id}">${staff.name}</option>`;
         const div = document.createElement("div");
         div.style="margin:8px 0;padding:8px;border:1px solid #eee;";
-        div.innerHTML = `姓名：${staff.name} &nbsp;&nbsp; 密码：${staff.pwd} 
+        div.innerHTML = `姓名：${staff.name} &nbsp;&nbsp; 密码：${staff.pwd}
+        <input type="password" id="editPwd_${staff.id}" placeholder="新密码" style="width:120px;padding:4px;margin:0 5px;">
+        <button class="btn" onclick="updateStaffPwd('${staff.id}')">修改密码</button>
         <button class="btn btn-danger" onclick="delStaff('${staff.id}')">删除</button>`;
         staffBox.appendChild(div);
     });
     refreshTotalTable();
+    loadLogList();
 }
 
 // 按月查询汇总
@@ -473,6 +499,81 @@ async function updateAdminPwd(){
         document.getElementById("newAdminPwd").value = "";
         document.getElementById("confirmAdminPwd").value = "";
     }
+}
+
+// 【新增】修改员工密码
+async function updateStaffPwd(staffId) {
+    const newPwd = document.getElementById(`editPwd_${staffId}`).value.trim();
+    if(!newPwd) return alert("请输入新密码");
+    if(newPwd.length < 3) return alert("密码长度不能少于3位");
+
+    const adminUser = document.getElementById("adminUser").value;
+    const adminPwd = document.getElementById("adminPwd").value;
+
+    const res = await fetch("/api/admin/updateStaffPwd", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+            username: adminUser,
+            pwd: adminPwd,
+            staffId: staffId,
+            newPwd: newPwd
+        })
+    });
+    const json = await res.json();
+    alert(json.msg);
+    if(json.code === 0) {
+        await renderAdminPage();
+    }
+}
+
+// 【新增】加载日志列表
+async function loadLogList() {
+    const adminUser = document.getElementById("adminUser").value;
+    const adminPwd = document.getElementById("adminPwd").value;
+    const logTable = document.getElementById("logTable");
+    logTable.innerHTML = "";
+
+    const res = await fetch("/api/admin/getLog", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({username: adminUser, pwd: adminPwd})
+    });
+    const json = await res.json();
+    if(json.code !== 0) return;
+
+    const logList = json.data;
+    if(logList.length === 0) {
+        logTable.innerHTML = "<tr><td colspan='4' style='text-align:center;'>暂无操作日志</td></tr>";
+        return;
+    }
+
+    logList.forEach(log => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${log.time}</td>
+            <td>${log.operator}</td>
+            <td>${log.type}</td>
+            <td>${log.content}</td>
+        `;
+        logTable.appendChild(tr);
+    });
+}
+
+// 【新增】清空全部日志
+async function clearAllLog() {
+    if(!confirm("确定清空所有日志？此操作不可恢复！")) return;
+    const adminUser = document.getElementById("adminUser").value;
+    const adminPwd = document.getElementById("adminPwd").value;
+
+    const res = await fetch("/api/admin/clearLog", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({username: adminUser, pwd: adminPwd})
+    });
+    const json = await res.json();
+    alert(json.msg);
+    loadLogList();
 }
 
 showPage("login");
