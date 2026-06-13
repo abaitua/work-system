@@ -3,7 +3,6 @@ const { Redis } = require('@upstash/redis');
 const path = require('path');
 const app = express();
 
-// 初始化Redis
 let redis = null;
 try {
   redis = Redis.fromEnv();
@@ -21,27 +20,24 @@ const DEFAULT_DATA = {
   workData: {}
 };
 
-// 初始化默认数据
 async function initDefaultData() {
   if (!redis) return DEFAULT_DATA;
   await redis.set(DATA_KEY, DEFAULT_DATA);
   return DEFAULT_DATA;
 }
 
-// 读取数据
 async function readData() {
   if (!redis) return DEFAULT_DATA;
   let data = await redis.get(DATA_KEY);
   return data || await initDefaultData();
 }
 
-// 写入数据
 async function writeData(data) {
   if (!redis) return;
   await redis.set(DATA_KEY, data);
 }
 
-// 首页路由
+// 首页
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
@@ -83,7 +79,7 @@ app.get('/api/getAllData', async (req, res) => {
   }
 });
 
-// 保存工时数据
+// 保存工时
 app.post('/api/saveWorkData', async (req, res) => {
   try {
     const data = await readData();
@@ -138,19 +134,15 @@ app.delete('/api/delStaff/:id', async (req, res) => {
   }
 });
 
-// 管理员批量删除工时数据（清理存储）
+// ===================== 新增：管理员批量删除工时接口 =====================
 app.post('/api/admin/batchDeleteWork', async (req, res) => {
   try {
     const { username, pwd, staffId, year, month } = req.body;
     const data = await readData();
-    // 校验管理员权限
     if (data.admin.username !== username || data.admin.pwd !== pwd) {
-      return res.json({ code: 1, msg: "管理员权限验证失败" });
+      return res.json({ code: 1, msg: "权限校验失败" });
     }
-
-    // 按条件删除
     if (staffId) {
-      // 删除指定员工数据
       if (data.workData[staffId]) {
         if (year && month) {
           const prefix = `${year}-${String(month).padStart(2, '0')}`;
@@ -162,7 +154,6 @@ app.post('/api/admin/batchDeleteWork', async (req, res) => {
         }
       }
     } else {
-      // 删除全部员工数据
       if (year && month) {
         const prefix = `${year}-${String(month).padStart(2, '0')}`;
         Object.values(data.workData).forEach(person => {
@@ -174,11 +165,10 @@ app.post('/api/admin/batchDeleteWork', async (req, res) => {
         data.workData = {};
       }
     }
-
     await writeData(data);
     res.json({ code: 0, msg: "数据删除成功" });
   } catch (err) {
-    res.json({ code: -1, msg: "数据删除失败" });
+    res.json({ code: -1, msg: "删除失败" });
   }
 });
 
