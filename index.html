@@ -161,10 +161,18 @@
             <tbody id="totalTable"></tbody>
         </table>
 
-        <!-- 新增：系统操作日志区域 -->
+        <!-- 系统操作日志 + 筛选区域 -->
         <div class="split"></div>
         <h3>三、系统操作日志（仅管理员查看）</h3>
-        <button class="btn btn-danger" onclick="clearAllLog()">清空全部日志</button>
+        <!-- 日志筛选栏 -->
+        <div class="select-row" style="justify-content:flex-start;margin:10px 0;">
+            <select id="logStaffSel">
+                <option value="">全部员工</option>
+            </select>
+            <input type="date" id="logDateFilter" placeholder="选择日期">
+            <button class="btn" onclick="loadLogList()">查询日志</button>
+            <button class="btn btn-danger" onclick="clearAllLog()">清空全部日志</button>
+        </div>
         <div style="margin:10px 0;">
             <table>
                 <thead>
@@ -173,6 +181,7 @@
                         <th>操作人</th>
                         <th>操作类型</th>
                         <th>操作详情</th>
+                        <th>工时明细</th>
                     </tr>
                 </thead>
                 <tbody id="logTable"></tbody>
@@ -373,11 +382,14 @@ async function renderAdminPage() {
     const allData = await res.json();
     const staffBox = document.getElementById("staffManageList");
     const delStaffSel = document.getElementById("delStaffSel");
+    const logStaffSel = document.getElementById("logStaffSel");
 
     delStaffSel.innerHTML = "<option value=''>全部员工</option>";
+    logStaffSel.innerHTML = "<option value=''>全部员工</option>";
     staffBox.innerHTML = "<h4>现有员工列表</h4>";
     allData.staffList.forEach(staff=>{
         delStaffSel.innerHTML += `<option value="${staff.id}">${staff.name}</option>`;
+        logStaffSel.innerHTML += `<option value="${staff.id}">${staff.name}</option>`;
         const div = document.createElement("div");
         div.style="margin:8px 0;padding:8px;border:1px solid #eee;";
         div.innerHTML = `姓名：${staff.name} &nbsp;&nbsp; 密码：${staff.pwd}
@@ -501,7 +513,7 @@ async function updateAdminPwd(){
     }
 }
 
-// 【新增】修改员工密码
+// 修改员工密码
 async function updateStaffPwd(staffId) {
     const newPwd = document.getElementById(`editPwd_${staffId}`).value.trim();
     if(!newPwd) return alert("请输入新密码");
@@ -527,24 +539,31 @@ async function updateStaffPwd(staffId) {
     }
 }
 
-// 【新增】加载日志列表
+// 加载/筛选日志
 async function loadLogList() {
     const adminUser = document.getElementById("adminUser").value;
     const adminPwd = document.getElementById("adminPwd").value;
+    const filterStaffId = document.getElementById("logStaffSel").value;
+    const filterDate = document.getElementById("logDateFilter").value;
     const logTable = document.getElementById("logTable");
     logTable.innerHTML = "";
 
     const res = await fetch("/api/admin/getLog", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({username: adminUser, pwd: adminPwd})
+        body:JSON.stringify({
+            username: adminUser,
+            pwd: adminPwd,
+            filterStaffId: filterStaffId,
+            filterDate: filterDate
+        })
     });
     const json = await res.json();
     if(json.code !== 0) return;
 
     const logList = json.data;
     if(logList.length === 0) {
-        logTable.innerHTML = "<tr><td colspan='4' style='text-align:center;'>暂无操作日志</td></tr>";
+        logTable.innerHTML = "<tr><td colspan='5' style='text-align:center;'>暂无匹配日志</td></tr>";
         return;
     }
 
@@ -555,12 +574,13 @@ async function loadLogList() {
             <td>${log.operator}</td>
             <td>${log.type}</td>
             <td>${log.content}</td>
+            <td style="text-align:left;word-break:break-all;">${log.workDetail || "-"}</td>
         `;
         logTable.appendChild(tr);
     });
 }
 
-// 【新增】清空全部日志
+// 清空全部日志
 async function clearAllLog() {
     if(!confirm("确定清空所有日志？此操作不可恢复！")) return;
     const adminUser = document.getElementById("adminUser").value;
