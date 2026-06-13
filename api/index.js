@@ -18,10 +18,10 @@ const LOG_KEY = "work_system_log";
 const DEFAULT_DATA = {
   admin: { username: "admin", pwd: "123456" },
   staffList: [],
-  workData: {},
-  workItems: ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"]
+  workData: {}
 };
 const DEFAULT_LOG = [];
+const WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
 
 async function initDefaultData() {
   if (!redis) return DEFAULT_DATA;
@@ -58,17 +58,14 @@ async function clearAllLog() {
   await redis.set(LOG_KEY, DEFAULT_LOG);
 }
 
-// 格式化 中国时区(UTC+8) 时间 YYYY-MM-DD HH:mm:ss
-function formatCSTDate() {
-  const now = new Date();
-  const offset = 8 * 60 * 60 * 1000;
-  const cstTime = new Date(now.getTime() + offset);
-  const year = cstTime.getUTCFullYear();
-  const month = String(cstTime.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(cstTime.getUTCDate()).padStart(2, '0');
-  const h = String(cstTime.getUTCHours()).padStart(2, '0');
-  const m = String(cstTime.getUTCMinutes()).padStart(2, '0');
-  const s = String(cstTime.getUTCSeconds()).padStart(2, '0');
+// 时间格式化：UTC 转为 YYYY-MM-DD HH:mm:ss
+function formatUTCDate(date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const h = String(date.getUTCHours()).padStart(2, '0');
+  const m = String(date.getUTCMinutes()).padStart(2, '0');
+  const s = String(date.getUTCSeconds()).padStart(2, '0');
   return `${year}-${month}-${day} ${h}:${m}:${s}`;
 }
 
@@ -103,7 +100,7 @@ app.post('/api/staff/login', async (req, res) => {
   }
 });
 
-// 获取全部数据（包含工作项列表）
+// 获取全部数据
 app.get('/api/getAllData', async (req, res) => {
   try {
     const data = await readData();
@@ -119,11 +116,11 @@ app.get('/api/getStaffWork/:staffId', async (req, res) => {
     const data = await readData();
     res.json(data.workData[req.params.staffId] || {});
   } catch {
-    res.json({ code: -1, msg: "获取失败" });
+    res.json({});
   }
 });
 
-// 保存工时
+// 保存工时 + UTC 时间日志
 app.post('/api/saveWorkData', async (req, res) => {
   try {
     const data = await readData();
@@ -133,15 +130,16 @@ app.post('/api/saveWorkData', async (req, res) => {
     await writeData(data);
 
     let detailStr = "";
-    const items = data.workItems;
     workArr.forEach((val, idx) => {
-      detailStr += `${items[idx]}:${val}工时；`;
+      detailStr += `${WORK_LIST[idx]}:${val}工时；`;
     });
 
-    const timeStr = formatCSTDate();
+    const now = new Date();
+    const timeStr = formatUTCDate(now);
+    const logDate = day;
     await addLog({
       time: timeStr,
-      logDate: day,
+      logDate: logDate,
       operator: staffName || '未知员工',
       operatorId: staffId,
       type: "工时填报",
@@ -246,7 +244,8 @@ app.post('/api/admin/updateStaffPwd', async (req, res) => {
     staff.pwd = newPwd;
     await writeData(data);
 
-    const timeStr = formatCSTDate();
+    const now = new Date();
+    const timeStr = formatUTCDate(now);
     await addLog({
       time: timeStr,
       logDate: "",
@@ -263,72 +262,7 @@ app.post('/api/admin/updateStaffPwd', async (req, res) => {
   }
 });
 
-// 新增：添加工作内容
-app.post('/api/admin/addWorkItem', async (req, res) => {
-  try {
-    const { username, pwd, itemName } = req.body;
-    const data = await readData();
-    if (data.admin.username !== username || data.admin.pwd !== pwd) {
-      return res.json({ code: 1, msg: "权限校验失败" });
-    }
-    if (!itemName || itemName.trim() === "") {
-      return res.json({ code: 2, msg: "工作内容不能为空" });
-    }
-    const name = itemName.trim();
-    if (data.workItems.includes(name)) {
-      return res.json({ code: 3, msg: "该工作内容已存在" });
-    }
-    data.workItems.push(name);
-    await writeData(data);
-
-    const timeStr = formatCSTDate();
-    await addLog({
-      time: timeStr,
-      logDate: "",
-      operator: "管理员",
-      operatorId: "admin",
-      type: "工作内容管理",
-      content: `新增工作内容：${name}`,
-      workDetail: ""
-    });
-    res.json({ code: 0, msg: "添加成功" });
-  } catch {
-    res.json({ code: -1, msg: "添加失败" });
-  }
-});
-
-// 新增：删除工作内容
-app.post('/api/admin/delWorkItem', async (req, res) => {
-  try {
-    const { username, pwd, index } = req.body;
-    const data = await readData();
-    if (data.admin.username !== username || data.admin.pwd !== pwd) {
-      return res.json({ code: 1, msg: "权限校验失败" });
-    }
-    if (index < 0 || index >= data.workItems.length) {
-      return res.json({ code: 2, msg: "索引无效" });
-    }
-    const delName = data.workItems[index];
-    data.workItems.splice(index, 1);
-    await writeData(data);
-
-    const timeStr = formatCSTDate();
-    await addLog({
-      time: timeStr,
-      logDate: "",
-      operator: "管理员",
-      operatorId: "admin",
-      type: "工作内容管理",
-      content: `删除工作内容：${delName}`,
-      workDetail: ""
-    });
-    res.json({ code: 0, msg: "删除成功" });
-  } catch {
-    res.json({ code: -1, msg: "删除失败" });
-  }
-});
-
-// 获取日志
+// 获取日志（支持员工+日期筛选）
 app.post('/api/admin/getLog', async (req, res) => {
   try {
     const { username, pwd, filterStaffId, filterDate } = req.body;
@@ -337,12 +271,14 @@ app.post('/api/admin/getLog', async (req, res) => {
       return res.json({ code: 1, msg: "权限校验失败" });
     }
     let logList = await readLog();
+
     if (filterStaffId && filterStaffId !== "") {
       logList = logList.filter(item => item.operatorId === filterStaffId);
     }
     if (filterDate && filterDate !== "") {
       logList = logList.filter(item => item.logDate === filterDate);
     }
+
     res.json({ code: 0, data: logList });
   } catch {
     res.json({ code: -1, msg: "获取日志失败" });
@@ -359,7 +295,8 @@ app.post('/api/admin/clearLog', async (req, res) => {
     }
     await clearAllLog();
 
-    const timeStr = formatCSTDate();
+    const now = new Date();
+    const timeStr = formatUTCDate(now);
     await addLog({
       time: timeStr,
       logDate: "",
@@ -369,6 +306,7 @@ app.post('/api/admin/clearLog', async (req, res) => {
       content: "手动清空全部操作日志",
       workDetail: ""
     });
+
     res.json({ code: 0, msg: "日志已全部清空" });
   } catch {
     res.json({ code: -1, msg: "清空失败" });
