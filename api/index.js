@@ -1,135 +1,212 @@
 const express = require('express');
-const fs = require('fs');
+const { Redis } = require('@upstash/redis');
 const path = require('path');
 const app = express();
+
+let redis = null;
+try {
+  redis = Redis.fromEnv();
+} catch (err) {
+  console.error('Redis 初始化失败:', err);
+}
+
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '..')));
 
-// 极简静态 + 根路由（低版本兼容，不会404页面）
-app.use('/', express.static('./'));
-app.get('/', function(req, res){
-  res.sendFile('index.html');
-});
+const DATA_KEY = "work_system_data";
+const DEFAULT_DATA = {
+  admin: { username: "admin", pwd: "123456" },
+  staffList: [],
+  workData: {},
+  logData: {}
+};
 
-const DATA_PATH = path.join(__dirname, 'data.json');
-
-function initData() {
-    if (!fs.existsSync(DATA_PATH)) {
-        const init = {
-            admin: { username: 'admin', pwd: '123456' },
-            staffList: [],
-            workData: {},
-            logData: {},
-            workList: ["首件", "巡检", "入库", "出货", "外箱标", "内箱标", "特标", "工单打印", "核对物料"]
-        };
-        fs.writeFileSync(DATA_PATH, JSON.stringify(init, null, 2));
-    }
+async function initDefaultData() {
+  if (!redis) return DEFAULT_DATA;
+  await redis.set(DATA_KEY, DEFAULT_DATA);
+  return DEFAULT_DATA;
 }
 
 async function readData() {
-    initData();
-    return JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'));
+  if (!redis) return DEFAULT_DATA;
+  let data = await redis.get(DATA_KEY);
+  return data || await initDefaultData();
 }
 
 async function writeData(data) {
-    fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2));
+  if (!redis) return;
+  await redis.set(DATA_KEY, data);
 }
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'index.html'));
+});
 
 // 管理员登录
 app.post('/api/admin/login', async (req, res) => {
+  try {
     const data = await readData();
     const { username, pwd } = req.body;
-    if (username === data.admin.username && pwd === data.admin.pwd) {
-        res.json({ code: 0, msg: '登录成功' });
-    } else {
-        res.json({ code: -1, msg: '账号或密码错误' });
-    }
+    res.json(data.admin.username === username && data.admin.pwd === pwd
+      ? { code: 0, msg: "登录成功" }
+      : { code: 1, msg: "账号或密码错误" });
+  } catch {
+    res.json({ code: -1, msg: "服务异常" });
+  }
 });
 
 // 员工登录
 app.post('/api/staff/login', async (req, res) => {
+  try {
     const data = await readData();
     const { name, pwd } = req.body;
-    const staff = data.staffList.find(x => x.name === name && x.pwd === pwd);
-    if (staff) {
-        res.json({ code: 0, id: staff.id, name: staff.name });
-    } else {
-        res.json({ code: -1, msg: '姓名或密码错误' });
-    }
+    const user = data.staffList.find(item => item.name === name && item.pwd === pwd);
+    res.json(user
+      ? { code: 0, msg: "登录成功", id: user.id, name: user.name }
+      : { code: 1, msg: "账号或密码错误" });
+  } catch {
+    res.json({ code: -1, msg: "服务异常" });
+  }
+});
+
+// 获取全部数据
+app.get('/api/getAllData', async (req, res) => {
+  try {
+    const data = await readData();
+    res.json(data);
+  } catch {
+    res.json(DEFAULT_DATA);
+  }
+});
+
+// 获取单个员工工时
+app.get('/api/getStaffWork/:staffId', async (req, res) => {
+  try {
+    const data = await readData();
+    res.json(data.workData[req.params.staffId] || {});
+  } catch {
+    res.json({});
+  }
+});
+
+// 保存工时 + 记录日志
+app.post('/api/saveWorkData', async (req, res) => {
+  try {
+    const data = await readData();
+    const { staffId, day, workArr } = req.body;
+    const now = new Date();
+    const timeStr = now.toLocaleString();
+
+    if (!data.workData[staffId]) data.workData[staffId] = {};
+    data.workData[staffId][day] = workArr;
+
+    if (!data.logData[staffId]) data.logData[staffId] = [];
+    data.logData[staffId].push({
+      date: day,
+      time: timeStr,
+      data: workArr
+    });
+
+    await writeData(data);
+    res.json({ code: 0, msg: "保存成功" });
+  } catch {
+    res.json({ code: -1, msg: "保存失败" });
+  }
 });
 
 // 新增员工
 app.post('/api/addStaff', async (req, res) => {
+  try {
     const data = await readData();
     const { name, pwd } = req.body;
-    if (data.staffList.find(x => x.name === name)) {
-        return res.json({ code: -1, msg: '员工已存在' });
+    if (data.staffList.some(s => s.name === name)) {
+      return res.json({ code: 1, msg: "员工已存在" });
     }
-    const id = Date.now().toString();
-    data.staffList.push({ id, name, pwd });
-    data.workData[id] = {};
-    data.logData[id] = [];
+    const newId = Date.now().toString();
+    data.staffList.push({ id: newId, name, pwd });
     await writeData(data);
-    res.json({ code: 0, msg: '新增成功' });
+    res.json({ code: 0, msg: "添加成功" });
+  } catch {
+    res.json({ code: -1, msg: "添加失败" });
+  }
 });
 
 // 删除员工
 app.delete('/api/delStaff/:id', async (req, res) => {
+  try {
     const data = await readData();
     const id = req.params.id;
-    data.staffList = data.staffList.filter(x => x.id !== id);
+    data.staffList = data.staffList.filter(s => s.id !== id);
     delete data.workData[id];
     delete data.logData[id];
     await writeData(data);
-    res.json({ code: 0, msg: '删除成功' });
+    res.json({ code: 0, msg: "删除成功" });
+  } catch {
+    res.json({ code: -1, msg: "删除失败" });
+  }
 });
 
-// 修改员工密码
-app.post('/api/updateStaffPwd/:id', async (req, res) => {
+// 批量删除年月数据
+app.post('/api/admin/batchDeleteWork', async (req, res) => {
+  try {
+    const { username, pwd, staffId, year, month } = req.body;
     const data = await readData();
-    const id = req.params.id;
-    const { pwd } = req.body;
-    const staff = data.staffList.find(x => x.id === id);
-    if (!staff) return res.json({ code: -1, msg: '员工不存在' });
-    staff.pwd = pwd;
+    if (data.admin.username !== username || data.admin.pwd !== pwd) {
+      return res.json({ code: 1, msg: "权限校验失败" });
+    }
+    const prefix = `${year}-${String(month).padStart(2, '0')}`;
+    if (staffId) {
+      if (data.workData[staffId]) {
+        Object.keys(data.workData[staffId]).forEach(key => {
+          if (key.startsWith(prefix)) delete data.workData[staffId][key];
+        });
+      }
+    } else {
+      Object.values(data.workData).forEach(person => {
+        Object.keys(person).forEach(key => {
+          if (key.startsWith(prefix)) delete person[key];
+        });
+      });
+    }
     await writeData(data);
-    res.json({ code: 0, msg: '密码修改成功' });
+    res.json({ code: 0, msg: "数据删除成功" });
+  } catch (err) {
+    res.json({ code: -1, msg: "删除失败" });
+  }
 });
 
-// 保存工时
-app.post('/api/saveWorkData', async (req, res) => {
+// 修改管理员密码
+app.post('/api/updateAdminPwd', async (req, res) => {
+  try {
+    const { oldPwd, newPwd } = req.body;
     const data = await readData();
-    const { staffId, day, workArr } = req.body;
-    if (!data.workData[staffId]) data.workData[staffId] = {};
-    data.workData[staffId][day] = workArr;
+    if (data.admin.pwd !== oldPwd) {
+      return res.json({ code: 1, msg: "原密码输入错误" });
+    }
+    data.admin.pwd = newPwd;
     await writeData(data);
-    res.json({ code: 0 });
+    res.json({ code: 0, msg: "管理员密码修改成功，请重新登录" });
+  } catch (err) {
+    res.json({ code: -1, msg: "修改失败" });
+  }
 });
 
-// 获取工时
-app.get('/api/getStaffWork/:staffId', async (req, res) => {
+// 管理员修改员工密码
+app.post('/api/editStaffPwd', async (req, res) => {
+  try {
+    const { staffId, newPwd } = req.body;
     const data = await readData();
-    res.json(data.workData[req.params.staffId] || {});
-});
-
-// 保存工作内容
-app.post('/api/saveWorkList', async (req, res) => {
-    const data = await readData();
-    data.workList = req.body.workList;
+    const staff = data.staffList.find(s => s.id === staffId);
+    if (!staff) return res.json({ code: 1, msg: "员工不存在" });
+    staff.pwd = newPwd;
     await writeData(data);
-    res.json({ code: 0 });
+    res.json({ code: 0, msg: "员工密码修改成功" });
+  } catch {
+    res.json({ code: -1, msg: "修改失败" });
+  }
 });
 
-// 添加日志
-app.post('/api/addStaffLog', async (req, res) => {
-    const data = await readData();
-    const { staffId, date, time, data: arr } = req.body;
-    if (!data.logData[staffId]) data.logData[staffId] = [];
-    data.logData[staffId].push({ date, time, data: arr });
-    await writeData(data);
-    res.json({ code: 0 });
-});
-
-// 你的原有日志接口（完全不动）
+// 获取员工日志
 app.get('/api/getStaffLog/:staffId', async (req, res) => {
   try {
     const data = await readData();
@@ -140,6 +217,7 @@ app.get('/api/getStaffLog/:staffId', async (req, res) => {
   }
 });
 
+// 新增：清空指定员工所有日志
 app.delete('/api/clearStaffLog/:staffId', async (req, res) => {
   try {
     const data = await readData();
@@ -152,43 +230,4 @@ app.delete('/api/clearStaffLog/:staffId', async (req, res) => {
   }
 });
 
-// 批量删除数据
-app.post('/api/admin/batchDeleteWork', async (req, res) => {
-    const data = await readData();
-    const { staffId, year, month } = req.body;
-    const prefix = `${year}-${String(month).padStart(2, '0')}`;
-    if (staffId) {
-        if (data.workData[staffId]) {
-            Object.keys(data.workData[staffId]).forEach(k => {
-                if (k.startsWith(prefix)) delete data.workData[staffId][k];
-            });
-        }
-    } else {
-        Object.keys(data.workData).forEach(sid => {
-            Object.keys(data.workData[sid]).forEach(k => {
-                if (k.startsWith(prefix)) delete data.workData[sid][k];
-            });
-        });
-    }
-    await writeData(data);
-    res.json({ code: 0, msg: '删除成功' });
-});
-
-// 修改管理员密码
-app.post('/api/updateAdminPwd', async (req, res) => {
-    const data = await readData();
-    const { oldPwd, newPwd } = req.body;
-    if (data.admin.pwd !== oldPwd) return res.json({ code: -1, msg: '原密码错误' });
-    data.admin.pwd = newPwd;
-    data.admin.pwd = newPwd;
-    await writeData(data);
-    res.json({ code: 0, msg: '管理员密码修改成功' });
-});
-
-// 获取全部数据
-app.get('/api/getAllData', async (req, res) => {
-    const data = await readData();
-    res.json(data);
-});
-
-app.listen(3000);
+module.exports = app;
