@@ -14,11 +14,13 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '..')));
 
 const DATA_KEY = "work_system_data";
+const LOG_KEY = "work_system_log";
 const DEFAULT_DATA = {
   admin: { username: "admin", pwd: "123456" },
   staffList: [],
   workData: {}
 };
+const DEFAULT_LOG = [];
 
 async function initDefaultData() {
   if (!redis) return DEFAULT_DATA;
@@ -35,6 +37,25 @@ async function readData() {
 async function writeData(data) {
   if (!redis) return;
   await redis.set(DATA_KEY, data);
+}
+
+// 日志相关工具函数
+async function readLog() {
+  if (!redis) return DEFAULT_LOG;
+  let log = await redis.get(LOG_KEY);
+  return log || DEFAULT_LOG;
+}
+
+async function addLog(logItem) {
+  if (!redis) return;
+  let logList = await readLog();
+  logList.unshift(logItem);
+  await redis.set(LOG_KEY, logList);
+}
+
+async function clearAllLog() {
+  if (!redis) return;
+  await redis.set(LOG_KEY, DEFAULT_LOG);
 }
 
 app.get('/', (req, res) => {
@@ -88,14 +109,25 @@ app.get('/api/getStaffWork/:staffId', async (req, res) => {
   }
 });
 
-// 保存工时
+// 保存工时 + 记录员工操作日志
 app.post('/api/saveWorkData', async (req, res) => {
   try {
     const data = await readData();
-    const { staffId, day, workArr } = req.body;
+    const { staffId, day, workArr, staffName } = req.body;
     if (!data.workData[staffId]) data.workData[staffId] = {};
     data.workData[staffId][day] = workArr;
     await writeData(data);
+
+    const now = new Date();
+    const timeStr = now.toLocaleString('zh-CN');
+    await addLog({
+      time: timeStr,
+      operator: staffName || '未知员工',
+      operatorId: staffId,
+      type: "工时填报",
+      content: `填写日期【${day}】工时数据`
+    });
+
     res.json({ code: 0, msg: "保存成功" });
   } catch {
     res.json({ code: -1, msg: "保存失败" });
@@ -162,21 +194,91 @@ app.post('/api/admin/batchDeleteWork', async (req, res) => {
   }
 });
 
-// ========== 新增接口：修改管理员密码 ==========
+// 修改管理员密码
 app.post('/api/updateAdminPwd', async (req, res) => {
   try {
     const { oldPwd, newPwd } = req.body;
     const data = await readData();
-    // 校验原密码
     if (data.admin.pwd !== oldPwd) {
       return res.json({ code: 1, msg: "原密码输入错误" });
     }
-    // 更新密码
     data.admin.pwd = newPwd;
     await writeData(data);
     res.json({ code: 0, msg: "管理员密码修改成功，请使用新密码重新登录" });
   } catch (err) {
     res.json({ code: -1, msg: "修改失败" });
+  }
+});
+
+// 【新增】管理员修改员工密码
+app.post('/api/admin/updateStaffPwd', async (req, res) => {
+  try {
+    const { username, pwd, staffId, newPwd } = req.body;
+    const data = await readData();
+    if (data.admin.username !== username || data.admin.pwd !== pwd) {
+      return res.json({ code: 1, msg: "权限校验失败" });
+    }
+    const staff = data.staffList.find(s => s.id === staffId);
+    if (!staff) {
+      return res.json({ code: 2, msg: "员工不存在" });
+    }
+    staff.pwd = newPwd;
+    await writeData(data);
+
+    const now = new Date();
+    const timeStr = now.toLocaleString('zh-CN');
+    await addLog({
+      time: timeStr,
+      operator: "管理员",
+      operatorId: "admin",
+      type: "密码修改",
+      content: `修改员工【${staff.name}】登录密码`
+    });
+
+    res.json({ code: 0, msg: "员工密码修改成功" });
+  } catch {
+    res.json({ code: -1, msg: "修改失败" });
+  }
+});
+
+// 【新增】管理员获取所有日志
+app.post('/api/admin/getLog', async (req, res) => {
+  try {
+    const { username, pwd } = req.body;
+    const data = await readData();
+    if (data.admin.username !== username || data.admin.pwd !== pwd) {
+      return res.json({ code: 1, msg: "权限校验失败" });
+    }
+    const logList = await readLog();
+    res.json({ code: 0, data: logList });
+  } catch {
+    res.json({ code: -1, msg: "获取日志失败" });
+  }
+});
+
+// 【新增】管理员清空全部日志
+app.post('/api/admin/clearLog', async (req, res) => {
+  try {
+    const { username, pwd } = req.body;
+    const data = await readData();
+    if (data.admin.username !== username || data.admin.pwd !== pwd) {
+      return res.json({ code: 1, msg: "权限校验失败" });
+    }
+    await clearAllLog();
+
+    const now = new Date();
+    const timeStr = now.toLocaleString('zh-CN');
+    await addLog({
+      time: timeStr,
+      operator: "管理员",
+      operatorId: "admin",
+      type: "日志操作",
+      content: "手动清空全部操作日志"
+    });
+
+    res.json({ code: 0, msg: "日志已全部清空" });
+  } catch {
+    res.json({ code: -1, msg: "清空失败" });
   }
 });
 
