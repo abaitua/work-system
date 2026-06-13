@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工作量统计系统</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:"Microsoft Yahei",sans-serif;}
+        body{background:#f5f7fa;padding:20px;}
+        .container{max-width:1200px;margin:0 auto;background:#fff;padding:25px;border-radius:8px;box-shadow:0 2px 10px #ddd;}
+        h2{text-align:center;margin-bottom:25px;color:#333;}
+        .btn{padding:8px 16px;background:#409eff;color:#fff;border:none;border-radius:4px;cursor:pointer;margin:5px;}
+        .btn:hover{background:#66b1ff;}
+        .btn-danger{background:#f56c6c;}
+        .btn-danger:hover{background:#f78989;}
+        .btn-success{background:#67c23a;}
+        .btn-success:hover{background:#85ce61;}
+        .login-box{max-width:400px;margin:50px auto;border:1px solid #eee;padding:30px;border-radius:8px;}
+        .login-item{margin:15px 0;}
+        .login-item label{display:block;margin-bottom:5px;}
+        .login-item input{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;}
+        .tab{margin:20px 0;text-align:center;}
+        .tab button{margin:0 10px;}
+        .date-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin:20px 0;}
+        .date-item{border:1px solid #eee;padding:12px;border-radius:6px;text-align:center;cursor:pointer;}
+        .date-item:hover{background:#f0f7ff;}
+        table{width:100%;border-collapse:collapse;margin:20px 0;}
+        th,td{border:1px solid #ccc;padding:10px;text-align:center;}
+        th{background:#f8f9fa;}
+        input[type="number"]{width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;}
+        .hide{display:none;}
+        .split{margin:30px 0;border-top:1px solid #eee;}
+    </style>
+</head>
+<body>
+<div class="container">
+    <div id="pageLogin">
+        <h2>工作量统计系统 - 登录</h2>
+        <div class="tab">
+            <button class="btn" type="button" onclick="switchLogin('staff')">员工登录</button>
+            <button class="btn btn-success" type="button" onclick="switchLogin('admin')">管理员登录</button>
+        </div>
+        <div class="login-box" id="staffLogin">
+            <div class="login-item">
+                <label>姓名</label>
+                <input type="text" id="staffName">
+            </div>
+            <div class="login-item">
+                <label>密码</label>
+                <input type="password" id="staffPwd">
+            </div>
+            <div style="text-align:center;">
+                <button class="btn btn-success" type="button" id="staffLoginBtn">登录</button>
+            </div>
+        </div>
+        <div class="login-box hide" id="adminLogin">
+            <div class="login-item">
+                <label>管理员账号</label>
+                <input type="text" id="adminUser">
+            </div>
+            <div class="login-item">
+                <label>管理员密码</label>
+                <input type="password" id="adminPwd">
+            </div>
+            <div style="text-align:center;">
+                <button class="btn btn-success" type="button" id="adminLoginBtn">登录</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="pageStaffDate" class="hide">
+        <h2>欢迎：<span id="currStaffName"></span></h2>
+        <button class="btn" type="button" onclick="logout()">退出登录</button>
+        <div class="date-list" id="dateBox"></div>
+    </div>
+
+    <div id="pageStaffDetail" class="hide">
+        <h2><span id="detailStaffName"></span> 第<span id="detailDay"></span>天 - 工作明细</h2>
+        <button class="btn" type="button" onclick="backToDate()">返回日期</button>
+        <table>
+            <thead>
+                <tr>
+                    <th>工作内容</th>
+                    <th>工时</th>
+                </tr>
+            </thead>
+            <tbody id="detailTable"></tbody>
+        </table>
+        <button class="btn btn-success" type="button" onclick="saveStaffWork()">保存数据</button>
+    </div>
+
+    <div id="pageAdmin" class="hide">
+        <h2>管理员后台</h2>
+        <button class="btn btn-danger" type="button" onclick="logout()">退出登录</button>
+        <div class="split"></div>
+        <h3>一、员工管理（新增/删除）</h3>
+        <div class="login-item" style="max-width:400px;">
+            <label>新员工姓名</label>
+            <input type="text" id="newStaffName">
+            <label>登录密码</label>
+            <input type="password" id="newStaffPwd">
+            <button class="btn btn-success" type="button" onclick="addStaff()" style="margin-top:10px;">新增员工</button>
+        </div>
+        <div id="staffManageList"></div>
+        <div class="split"></div>
+        <h3>二、全员月度工时汇总</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>人员</th>
+                    <th>首件</th>
+                    <th>巡检</th>
+                    <th>入库</th>
+                    <th>出货</th>
+                    <th>外箱标</th>
+                    <th>内箱标</th>
+                    <th>特标</th>
+                    <th>工单打印</th>
+                    <th>核对物料</th>
+                </tr>
+            </thead>
+            <tbody id="totalTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const DAY_COUNT = 30;
+const WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
+let currStaffId = "";
+let currStaffName = "";
+let currDay = 1;
+
+document.addEventListener('DOMContentLoaded', function(){
+    document.getElementById('staffLoginBtn').addEventListener('click', staffLogin);
+    document.getElementById('adminLoginBtn').addEventListener('click', adminLogin);
+});
+
+function switchLogin(type) {
+    document.getElementById("staffLogin").classList.add("hide");
+    document.getElementById("adminLogin").classList.add("hide");
+    if(type === "staff") document.getElementById("staffLogin").classList.remove("hide");
+    if(type === "admin") document.getElementById("adminLogin").classList.remove("hide");
+}
+
+function showPage(page) {
+    document.getElementById("pageLogin").classList.add("hide");
+    document.getElementById("pageStaffDate").classList.add("hide");
+    document.getElementById("pageStaffDetail").classList.add("hide");
+    document.getElementById("pageAdmin").classList.add("hide");
+    if(page === "login") document.getElementById("pageLogin").classList.remove("hide");
+    if(page === "staffDate") document.getElementById("pageStaffDate").classList.remove("hide");
+    if(page === "staffDetail") document.getElementById("pageStaffDetail").classList.remove("hide");
+    if(page === "admin") document.getElementById("pageAdmin").classList.remove("hide");
+}
+
+function logout() {
+    currStaffId = "";
+    currStaffName = "";
+    showPage("login");
+}
+
+async function staffLogin() {
+    const name = document.getElementById("staffName").value.trim();
+    const pwd = document.getElementById("staffPwd").value.trim();
+    if(!name || !pwd) return alert("请输入姓名和密码");
+    try{
+        const res = await fetch("/api/staff/login", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({name,pwd})
+        });
+        const json = await res.json();
+        if(json.code === 0) {
+            currStaffId = json.id;
+            currStaffName = json.name;
+            document.getElementById("currStaffName").innerText = currStaffName;
+            renderDateList();
+            showPage("staffDate");
+        } else {
+            alert(json.msg);
+        }
+    }catch(e){
+        alert("请求失败，服务未启动");
+    }
+}
+
+async function adminLogin() {
+    const user = document.getElementById("adminUser").value.trim();
+    const pwd = document.getElementById("adminPwd").value.trim();
+    if(!user || !pwd) return alert("请输入账号密码");
+    try{
+        const res = await fetch("/api/admin/login", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({username:user,pwd})
+        });
+        const json = await res.json();
+        if(json.code === 0) {
+            await renderAdminPage();
+            showPage("admin");
+        } else {
+            alert(json.msg);
+        }
+    }catch(e){
+        alert("请求失败，服务未启动");
+    }
+}
+
+function renderDateList() {
+    const box = document.getElementById("dateBox");
+    box.innerHTML = "";
+    for(let d=1;d<=DAY_COUNT;d++){
+        const div = document.createElement("div");
+        div.className = "date-item";
+        div.innerText = `第${d}天`;
+        div.onclick = ()=>{
+            currDay = d;
+            goDetail();
+        };
+        box.appendChild(div);
+    }
+}
+
+async function goDetail() {
+    document.getElementById("detailStaffName").innerText = currStaffName;
+    document.getElementById("detailDay").innerText = currDay;
+    const res = await fetch(`/api/getStaffWork/${currStaffId}`);
+    const workData = await res.json();
+    const dayData = workData[currDay] || WORK_LIST.map(()=>0);
+    const table = document.getElementById("detailTable");
+    table.innerHTML = "";
+    WORK_LIST.forEach((name,idx)=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${name}</td>
+            <td><input type="number" step="0.1" id="work${idx}" value="${dayData[idx]}"></td>
+        `;
+        table.appendChild(tr);
+    });
+    showPage("staffDetail");
+}
+
+function backToDate() {
+    showPage("staffDate");
+}
+
+async function saveStaffWork() {
+    const arr = [];
+    WORK_LIST.forEach((_,idx)=>{
+        const val = document.getElementById("work"+idx).value || 0;
+        arr.push(Number(val));
+    });
+    await fetch("/api/saveWorkData", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({staffId:currStaffId, day:currDay, workArr:arr})
+    });
+    alert("保存成功");
+}
+
+async function renderAdminPage() {
+    const res = await fetch("/api/getAllData");
+    const allData = await res.json();
+    const staffBox = document.getElementById("staffManageList");
+    staffBox.innerHTML = "<h4>现有员工列表</h4>";
+    allData.staffList.forEach(staff=>{
+        const div = document.createElement("div");
+        div.style="margin:8px 0;padding:8px;border:1px solid #eee;";
+        div.innerHTML = `
+            姓名：${staff.name}
+            <button class="btn btn-danger" type="button" onclick="delStaff('${staff.id}')">删除</button>
+        `;
+        staffBox.appendChild(div);
+    });
+    const table = document.getElementById("totalTable");
+    table.innerHTML = "";
+    allData.staffList.forEach(staff=>{
+        const workSum = WORK_LIST.map(()=>0);
+        const staffData = allData.workData[staff.id] || {};
+        for(let d=1;d<=DAY_COUNT;d++){
+            const dayArr = staffData[d] || WORK_LIST.map(()=>0);
+            dayArr.forEach((val,idx)=> workSum[idx] += Number(val));
+        }
+        const tr = document.createElement("tr");
+        let html = `<td>${staff.name}</td>`;
+        workSum.forEach(item=> html += `<td>${item.toFixed(1)}</td>`);
+        tr.innerHTML = html;
+        table.appendChild(tr);
+    });
+}
+
+async function addStaff() {
+    const name = document.getElementById("newStaffName").value.trim();
+    const pwd = document.getElementById("newStaffPwd").value.trim();
+    if(!name || !pwd) return alert("请填写姓名和密码");
+    const res = await fetch("/api/addStaff", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({name,pwd})
+    });
+    const json = await res.json();
+    alert(json.msg);
+    if(json.code === 0) {
+        document.getElementById("newStaffName").value = "";
+        document.getElementById("newStaffPwd").value = "";
+        await renderAdminPage();
+    }
+}
+
+async function delStaff(id) {
+    if(!confirm("确定删除该员工？对应数据也会清除")) return;
+    await fetch(`/api/delStaff/${id}`, { method:"DELETE" });
+    await renderAdminPage();
+    alert("删除成功");
+    await renderAdminPage();
+}
+
+showPage("login");
+</script>
+</body>
+</html>
