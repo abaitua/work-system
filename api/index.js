@@ -17,8 +17,7 @@ const DATA_KEY = "work_system_data";
 const DEFAULT_DATA = {
   admin: { username: "admin", pwd: "123456" },
   staffList: [],
-  workData: {},
-  logData: {}
+  workData: {}
 };
 
 async function initDefaultData() {
@@ -89,24 +88,13 @@ app.get('/api/getStaffWork/:staffId', async (req, res) => {
   }
 });
 
-// 保存工时 + 记录日志
+// 保存工时
 app.post('/api/saveWorkData', async (req, res) => {
   try {
     const data = await readData();
     const { staffId, day, workArr } = req.body;
-    const now = new Date();
-    const timeStr = now.toLocaleString();
-
     if (!data.workData[staffId]) data.workData[staffId] = {};
     data.workData[staffId][day] = workArr;
-
-    if (!data.logData[staffId]) data.logData[staffId] = [];
-    data.logData[staffId].push({
-      date: day,
-      time: timeStr,
-      data: workArr
-    });
-
     await writeData(data);
     res.json({ code: 0, msg: "保存成功" });
   } catch {
@@ -138,7 +126,6 @@ app.delete('/api/delStaff/:id', async (req, res) => {
     const id = req.params.id;
     data.staffList = data.staffList.filter(s => s.id !== id);
     delete data.workData[id];
-    delete data.logData[id];
     await writeData(data);
     res.json({ code: 0, msg: "删除成功" });
   } catch {
@@ -175,58 +162,21 @@ app.post('/api/admin/batchDeleteWork', async (req, res) => {
   }
 });
 
-// 修改管理员密码
+// ========== 新增接口：修改管理员密码 ==========
 app.post('/api/updateAdminPwd', async (req, res) => {
   try {
     const { oldPwd, newPwd } = req.body;
     const data = await readData();
+    // 校验原密码
     if (data.admin.pwd !== oldPwd) {
       return res.json({ code: 1, msg: "原密码输入错误" });
     }
+    // 更新密码
     data.admin.pwd = newPwd;
     await writeData(data);
-    res.json({ code: 0, msg: "管理员密码修改成功，请重新登录" });
+    res.json({ code: 0, msg: "管理员密码修改成功，请使用新密码重新登录" });
   } catch (err) {
     res.json({ code: -1, msg: "修改失败" });
-  }
-});
-
-// 管理员修改员工密码
-app.post('/api/editStaffPwd', async (req, res) => {
-  try {
-    const { staffId, newPwd } = req.body;
-    const data = await readData();
-    const staff = data.staffList.find(s => s.id === staffId);
-    if (!staff) return res.json({ code: 1, msg: "员工不存在" });
-    staff.pwd = newPwd;
-    await writeData(data);
-    res.json({ code: 0, msg: "员工密码修改成功" });
-  } catch {
-    res.json({ code: -1, msg: "修改失败" });
-  }
-});
-
-// 获取员工日志
-app.get('/api/getStaffLog/:staffId', async (req, res) => {
-  try {
-    const data = await readData();
-    const log = data.logData[req.params.staffId] || [];
-    res.json(log);
-  } catch {
-    res.json([]);
-  }
-});
-
-// 新增：清空指定员工所有日志
-app.delete('/api/clearStaffLog/:staffId', async (req, res) => {
-  try {
-    const data = await readData();
-    const sid = req.params.staffId;
-    delete data.logData[sid];
-    await writeData(data);
-    res.json({ code: 0, msg: "日志清空成功" });
-  } catch {
-    res.json({ code: -1, msg: "操作失败" });
   }
 });
 
