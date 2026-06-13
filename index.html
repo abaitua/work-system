@@ -30,6 +30,9 @@
         input[type="number"]{width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;}
         .hide{display:none;}
         .split{margin:30px 0;border-top:1px solid #eee;}
+        /* 新增日期选择行样式，适配原有风格 */
+        .select-row{margin:20px 0;text-align:center;gap:10px;display:flex;justify-content:center;flex-wrap:wrap;}
+        .select-row select{padding:8px;border:1px solid #ccc;border-radius:4px;min-width:100px;}
     </style>
 </head>
 <body>
@@ -68,15 +71,23 @@
         </div>
     </div>
 
+    <!-- 员工页：替换为 年/月/日选择器（原30天列表移除） -->
     <div id="pageStaffDate" class="hide">
         <h2>欢迎：<span id="currStaffName"></span></h2>
         <button class="btn" type="button" onclick="logout()">退出登录</button>
-        <div class="date-list" id="dateBox"></div>
+
+        <!-- 年月日选择区域 -->
+        <div class="select-row">
+            <select id="selYear"></select>
+            <select id="selMonth"></select>
+            <select id="selDay"></select>
+            <button class="btn btn-success" onclick="goDetail()">进入填写</button>
+        </div>
     </div>
 
     <div id="pageStaffDetail" class="hide">
-        <h2><span id="detailStaffName"></span> 第<span id="detailDay"></span>天 - 工作明细</h2>
-        <button class="btn" type="button" onclick="backToDate()">返回日期</button>
+        <h2><span id="detailStaffName"></span> <span id="selectDateText"></span> - 工作明细</h2>
+        <button class="btn" type="button" onclick="backToDate()">返回日期选择</button>
         <table>
             <thead>
                 <tr>
@@ -102,6 +113,20 @@
             <button class="btn btn-success" type="button" onclick="addStaff()" style="margin-top:10px;">新增员工</button>
         </div>
         <div id="staffManageList"></div>
+
+        <!-- 【新增】管理员批量清理数据区域 -->
+        <div class="split"></div>
+        <h3>数据清理（释放存储空间）</h3>
+        <div class="select-row" style="justify-content:flex-start;">
+            <select id="delStaffSel">
+                <option value="">全部员工</option>
+            </select>
+            <select id="delYearSel"></select>
+            <select id="delMonthSel"></select>
+            <button class="btn btn-danger" onclick="delMonthData()">删除所选年月数据</button>
+            <button class="btn btn-danger" onclick="clearAllData()">清空全部工时</button>
+        </div>
+
         <div class="split"></div>
         <h3>二、全员月度工时汇总</h3>
         <table>
@@ -125,15 +150,72 @@
 </div>
 
 <script>
-const DAY_COUNT = 30;
 const WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
 let currStaffId = "";
 let currStaffName = "";
-let currDay = 1;
+// 全局保存当前选中日期key
+let currentDateKey = "";
+
+// 初始化年月日下拉框
+function initDateSelect() {
+    const now = new Date();
+    const currYear = now.getFullYear();
+    const currMonth = now.getMonth() + 1;
+    const currDay = now.getDate();
+
+    const yearSel = document.getElementById("selYear");
+    const monthSel = document.getElementById("selMonth");
+    const daySel = document.getElementById("selDay");
+    const delYearSel = document.getElementById("delYearSel");
+    const delMonthSel = document.getElementById("delMonthSel");
+    const delStaffSel = document.getElementById("delStaffSel");
+
+    // 年份范围：前后5年
+    for (let y = currYear - 5; y <= currYear + 2; y++) {
+        yearSel.innerHTML += `<option value="${y}">${y}</option>`;
+        delYearSel.innerHTML += `<option value="${y}">${y}</option>`;
+    }
+    // 月份 1-12
+    for (let m = 1; m <= 12; m++) {
+        monthSel.innerHTML += `<option value="${m}">${m}</option>`;
+        delMonthSel.innerHTML += `<option value="${m}">${m}</option>`;
+    }
+    // 填充日期
+    function fillDay(y, m) {
+        daySel.innerHTML = "";
+        const maxDay = new Date(y, m, 0).getDate();
+        for (let d = 1; d <= maxDay; d++) {
+            daySel.innerHTML += `<option value="${d}">${d}</option>`;
+        }
+    }
+    fillDay(currYear, currMonth);
+
+    // 默认选中当前日期
+    yearSel.value = currYear;
+    monthSel.value = currMonth;
+    daySel.value = currDay;
+    delYearSel.value = currYear;
+    delMonthSel.value = currMonth;
+    delStaffSel.innerHTML = `<option value="">全部员工</option>`;
+
+    // 切换年月自动更新天数
+    yearSel.onchange = () => fillDay(+yearSel.value, +monthSel.value);
+    monthSel.onchange = () => fillDay(+yearSel.value, +monthSel.value);
+}
+
+// 格式化日期 key 例：2026-06-13
+function getFormatDate() {
+    const y = document.getElementById("selYear").value;
+    const m = String(document.getElementById("selMonth").value).padStart(2, "0");
+    const d = String(document.getElementById("selDay").value).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
 
 document.addEventListener('DOMContentLoaded', function(){
     document.getElementById('staffLoginBtn').addEventListener('click', staffLogin);
     document.getElementById('adminLoginBtn').addEventListener('click', adminLogin);
+    // 页面加载初始化日期选择
+    initDateSelect();
 });
 
 function switchLogin(type) {
@@ -157,6 +239,7 @@ function showPage(page) {
 function logout() {
     currStaffId = "";
     currStaffName = "";
+    currentDateKey = "";
     showPage("login");
 }
 
@@ -175,7 +258,6 @@ async function staffLogin() {
             currStaffId = json.id;
             currStaffName = json.name;
             document.getElementById("currStaffName").innerText = currStaffName;
-            renderDateList();
             showPage("staffDate");
         } else {
             alert(json.msg);
@@ -207,27 +289,18 @@ async function adminLogin() {
     }
 }
 
-function renderDateList() {
-    const box = document.getElementById("dateBox");
-    box.innerHTML = "";
-    for(let d=1;d<=DAY_COUNT;d++){
-        const div = document.createElement("div");
-        div.className = "date-item";
-        div.innerText = `第${d}天`;
-        div.onclick = ()=>{
-            currDay = d;
-            goDetail();
-        };
-        box.appendChild(div);
-    }
-}
-
+// 进入明细填写页（替换原30天点击逻辑）
 async function goDetail() {
+    currentDateKey = getFormatDate();
+    const y = document.getElementById("selYear").value;
+    const m = document.getElementById("selMonth").value;
+    const d = document.getElementById("selDay").value;
     document.getElementById("detailStaffName").innerText = currStaffName;
-    document.getElementById("detailDay").innerText = currDay;
+    document.getElementById("selectDateText").innerText = `${y}年${m}月${d}日`;
+
     const res = await fetch(`/api/getStaffWork/${currStaffId}`);
     const workData = await res.json();
-    const dayData = workData[currDay] || WORK_LIST.map(()=>0);
+    const dayData = workData[currentDateKey] || WORK_LIST.map(()=>0);
     const table = document.getElementById("detailTable");
     table.innerHTML = "";
     WORK_LIST.forEach((name,idx)=>{
@@ -254,7 +327,7 @@ async function saveStaffWork() {
     await fetch("/api/saveWorkData", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({staffId:currStaffId, day:currDay, workArr:arr})
+        body:JSON.stringify({staffId:currStaffId, day:currentDateKey, workArr:arr})
     });
     alert("保存成功");
 }
@@ -263,22 +336,26 @@ async function renderAdminPage() {
     const res = await fetch("/api/getAllData");
     const allData = await res.json();
     const staffBox = document.getElementById("staffManageList");
+    const delStaffSel = document.getElementById("delStaffSel");
+    // 重置员工下拉
+    delStaffSel.innerHTML = "<option value=''>全部员工</option>";
     staffBox.innerHTML = "<h4>现有员工列表</h4>";
     allData.staffList.forEach(staff=>{
+        delStaffSel.innerHTML += `<option value="${staff.id}">${staff.name}</option>`;
         const div = document.createElement("div");
         div.style="margin:8px 0;padding:8px;border:1px solid #eee;";
         div.innerHTML = `姓名：${staff.name} <button class="btn btn-danger" onclick="delStaff('${staff.id}')">删除</button>`;
         staffBox.appendChild(div);
     });
+
     const table = document.getElementById("totalTable");
     table.innerHTML = "";
     allData.staffList.forEach(staff=>{
         const workSum = WORK_LIST.map(()=>0);
         const staffData = allData.workData[staff.id] || {};
-        for(let d=1;d<=DAY_COUNT;d++){
-            const dayArr = staffData[d] || WORK_LIST.map(()=>0);
+        Object.values(staffData).forEach(dayArr=>{
             dayArr.forEach((val,idx)=> workSum[idx] += Number(val));
-        }
+        });
         const tr = document.createElement("tr");
         let html = `<td>${staff.name}</td>`;
         workSum.forEach(item=> html += `<td>${item.toFixed(1)}</td>`);
@@ -310,6 +387,47 @@ async function delStaff(id) {
     await fetch(`/api/delStaff/${id}`, { method:"DELETE" });
     await renderAdminPage();
     alert("删除成功");
+}
+
+// ========== 新增：管理员批量删除数据 ==========
+async function delMonthData(){
+    const adminUser = document.getElementById("adminUser").value;
+    const adminPwd = document.getElementById("adminPwd").value;
+    const staffId = document.getElementById("delStaffSel").value;
+    const y = document.getElementById("delYearSel").value;
+    const m = document.getElementById("delMonthSel").value;
+    if(!confirm("确定删除所选年月工时数据？")) return;
+    const res = await fetch("/api/admin/batchDeleteWork",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+            username: adminUser,
+            pwd: adminPwd,
+            staffId: staffId,
+            year: y,
+            month: m
+        })
+    });
+    const json = await res.json();
+    alert(json.msg);
+    await renderAdminPage();
+}
+
+async function clearAllData(){
+    const adminUser = document.getElementById("adminUser").value;
+    const adminPwd = document.getElementById("adminPwd").value;
+    if(!confirm("⚠️ 危险操作：清空所有工时数据，不可恢复！")) return;
+    const res = await fetch("/api/admin/batchDeleteWork",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+            username: adminUser,
+            pwd: adminPwd
+        })
+    });
+    const json = await res.json();
+    alert(json.msg);
+    await renderAdminPage();
 }
 
 showPage("login");
