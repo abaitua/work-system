@@ -7,11 +7,16 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(__dirname));
 
+// 修复：根路径默认打开 index.html
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 const DATA_PATH = path.join(__dirname, 'data.json');
 const DAY_COUNT = 30;
 const WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
 
-// 初始化默认数据
+// 初始化数据
 function initDefaultData() {
   const initData = {
     admin: { username: "admin", pwd: "123456" },
@@ -34,18 +39,18 @@ function writeData(data) {
   fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
 
-// 管理员登录
+// 管理员登录接口
 app.post('/api/admin/login', (req, res) => {
   const { username, pwd } = req.body;
   const data = readData();
   if (data.admin.username === username && data.admin.pwd === pwd) {
     res.json({ code: 0, msg: "登录成功" });
   } else {
-    res.json({ code: 1, msg: "管理员账号或密码错误" });
+    res.json({ code: 1, msg: "账号或密码错误" });
   }
 });
 
-// 员工登录
+// 员工登录接口
 app.post('/api/staff/login', (req, res) => {
   const { name, pwd } = req.body;
   const data = readData();
@@ -62,7 +67,7 @@ app.get('/api/getAllData', (req, res) => {
   res.json(readData());
 });
 
-// 保存单人员工工时
+// 保存员工工时
 app.post('/api/saveWorkData', (req, res) => {
   const { staffId, day, workArr } = req.body;
   const data = readData();
@@ -72,7 +77,7 @@ app.post('/api/saveWorkData', (req, res) => {
   res.json({ code: 0, msg: "保存成功" });
 });
 
-// 获取单个员工工时
+// 读取单人员工工时
 app.get('/api/getStaffWork/:staffId', (req, res) => {
   const staffId = req.params.staffId;
   const data = readData();
@@ -84,7 +89,7 @@ app.post('/api/addStaff', (req, res) => {
   const { name, pwd } = req.body;
   const data = readData();
   if (data.staffList.some(s => s.name === name)) {
-    return res.json({ code: 1, msg: "该员工已存在" });
+    return res.json({ code: 1, msg: "员工已存在" });
   }
   const newId = Date.now().toString();
   data.staffList.push({ id: newId, name, pwd });
@@ -103,5 +108,5 @@ app.delete('/api/delStaff/:id', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`服务已启动，端口：${PORT}`);
+  console.log(`服务启动成功，端口：${PORT}`);
 });
