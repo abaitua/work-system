@@ -21,6 +21,8 @@ const DEFAULT_DATA = {
   workData: {}
 };
 const DEFAULT_LOG = [];
+// 工时项目名称（与前端统一）
+const WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
 
 async function initDefaultData() {
   if (!redis) return DEFAULT_DATA;
@@ -109,7 +111,7 @@ app.get('/api/getStaffWork/:staffId', async (req, res) => {
   }
 });
 
-// 保存工时 + 记录员工操作日志
+// 保存工时 + 记录完整明细日志
 app.post('/api/saveWorkData', async (req, res) => {
   try {
     const data = await readData();
@@ -118,14 +120,23 @@ app.post('/api/saveWorkData', async (req, res) => {
     data.workData[staffId][day] = workArr;
     await writeData(data);
 
+    // 拼接每一项工时明细
+    let detailStr = "";
+    workArr.forEach((val, idx) => {
+      detailStr += `${WORK_LIST[idx]}:${val}工时；`;
+    });
+
     const now = new Date();
     const timeStr = now.toLocaleString('zh-CN');
+    const logDate = day; // 操作日期（填报日期）
     await addLog({
       time: timeStr,
+      logDate: logDate,
       operator: staffName || '未知员工',
       operatorId: staffId,
       type: "工时填报",
-      content: `填写日期【${day}】工时数据`
+      content: `填写日期【${day}】`,
+      workDetail: detailStr // 每项具体数值
     });
 
     res.json({ code: 0, msg: "保存成功" });
@@ -210,7 +221,7 @@ app.post('/api/updateAdminPwd', async (req, res) => {
   }
 });
 
-// 【新增】管理员修改员工密码
+// 管理员修改员工密码
 app.post('/api/admin/updateStaffPwd', async (req, res) => {
   try {
     const { username, pwd, staffId, newPwd } = req.body;
@@ -229,10 +240,12 @@ app.post('/api/admin/updateStaffPwd', async (req, res) => {
     const timeStr = now.toLocaleString('zh-CN');
     await addLog({
       time: timeStr,
+      logDate: "",
       operator: "管理员",
       operatorId: "admin",
       type: "密码修改",
-      content: `修改员工【${staff.name}】登录密码`
+      content: `修改员工【${staff.name}】登录密码`,
+      workDetail: ""
     });
 
     res.json({ code: 0, msg: "员工密码修改成功" });
@@ -241,22 +254,32 @@ app.post('/api/admin/updateStaffPwd', async (req, res) => {
   }
 });
 
-// 【新增】管理员获取所有日志
+// 获取日志（支持员工+日期筛选）
 app.post('/api/admin/getLog', async (req, res) => {
   try {
-    const { username, pwd } = req.body;
+    const { username, pwd, filterStaffId, filterDate } = req.body;
     const data = await readData();
     if (data.admin.username !== username || data.admin.pwd !== pwd) {
       return res.json({ code: 1, msg: "权限校验失败" });
     }
-    const logList = await readLog();
+    let logList = await readLog();
+
+    // 员工筛选
+    if (filterStaffId && filterStaffId !== "") {
+      logList = logList.filter(item => item.operatorId === filterStaffId);
+    }
+    // 日期筛选
+    if (filterDate && filterDate !== "") {
+      logList = logList.filter(item => item.logDate === filterDate);
+    }
+
     res.json({ code: 0, data: logList });
   } catch {
     res.json({ code: -1, msg: "获取日志失败" });
   }
 });
 
-// 【新增】管理员清空全部日志
+// 清空全部日志
 app.post('/api/admin/clearLog', async (req, res) => {
   try {
     const { username, pwd } = req.body;
@@ -270,10 +293,12 @@ app.post('/api/admin/clearLog', async (req, res) => {
     const timeStr = now.toLocaleString('zh-CN');
     await addLog({
       time: timeStr,
+      logDate: "",
       operator: "管理员",
       operatorId: "admin",
       type: "日志操作",
-      content: "手动清空全部操作日志"
+      content: "手动清空全部操作日志",
+      workDetail: ""
     });
 
     res.json({ code: 0, msg: "日志已全部清空" });
