@@ -21,7 +21,6 @@ const DEFAULT_DATA = {
   workData: {}
 };
 const DEFAULT_LOG = [];
-// 工时项目名称（与前端统一）
 const WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
 
 async function initDefaultData() {
@@ -41,7 +40,6 @@ async function writeData(data) {
   await redis.set(DATA_KEY, data);
 }
 
-// 日志相关工具函数
 async function readLog() {
   if (!redis) return DEFAULT_LOG;
   let log = await redis.get(LOG_KEY);
@@ -58,6 +56,17 @@ async function addLog(logItem) {
 async function clearAllLog() {
   if (!redis) return;
   await redis.set(LOG_KEY, DEFAULT_LOG);
+}
+
+// 时间格式化：UTC 转为 YYYY-MM-DD HH:mm:ss
+function formatUTCDate(date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const h = String(date.getUTCHours()).padStart(2, '0');
+  const m = String(date.getUTCMinutes()).padStart(2, '0');
+  const s = String(date.getUTCSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${h}:${m}:${s}`;
 }
 
 app.get('/', (req, res) => {
@@ -111,7 +120,7 @@ app.get('/api/getStaffWork/:staffId', async (req, res) => {
   }
 });
 
-// 保存工时 + 记录完整明细日志
+// 保存工时 + UTC 时间日志
 app.post('/api/saveWorkData', async (req, res) => {
   try {
     const data = await readData();
@@ -120,15 +129,14 @@ app.post('/api/saveWorkData', async (req, res) => {
     data.workData[staffId][day] = workArr;
     await writeData(data);
 
-    // 拼接每一项工时明细
     let detailStr = "";
     workArr.forEach((val, idx) => {
       detailStr += `${WORK_LIST[idx]}:${val}工时；`;
     });
 
     const now = new Date();
-    const timeStr = now.toLocaleString('zh-CN');
-    const logDate = day; // 操作日期（填报日期）
+    const timeStr = formatUTCDate(now);
+    const logDate = day;
     await addLog({
       time: timeStr,
       logDate: logDate,
@@ -136,7 +144,7 @@ app.post('/api/saveWorkData', async (req, res) => {
       operatorId: staffId,
       type: "工时填报",
       content: `填写日期【${day}】`,
-      workDetail: detailStr // 每项具体数值
+      workDetail: detailStr
     });
 
     res.json({ code: 0, msg: "保存成功" });
@@ -237,7 +245,7 @@ app.post('/api/admin/updateStaffPwd', async (req, res) => {
     await writeData(data);
 
     const now = new Date();
-    const timeStr = now.toLocaleString('zh-CN');
+    const timeStr = formatUTCDate(now);
     await addLog({
       time: timeStr,
       logDate: "",
@@ -264,11 +272,9 @@ app.post('/api/admin/getLog', async (req, res) => {
     }
     let logList = await readLog();
 
-    // 员工筛选
     if (filterStaffId && filterStaffId !== "") {
       logList = logList.filter(item => item.operatorId === filterStaffId);
     }
-    // 日期筛选
     if (filterDate && filterDate !== "") {
       logList = logList.filter(item => item.logDate === filterDate);
     }
@@ -290,7 +296,7 @@ app.post('/api/admin/clearLog', async (req, res) => {
     await clearAllLog();
 
     const now = new Date();
-    const timeStr = now.toLocaleString('zh-CN');
+    const timeStr = formatUTCDate(now);
     await addLog({
       time: timeStr,
       logDate: "",
