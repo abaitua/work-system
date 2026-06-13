@@ -37,7 +37,6 @@ async function writeData(data) {
   await redis.set(DATA_KEY, data);
 }
 
-// 首页
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
@@ -69,7 +68,7 @@ app.post('/api/staff/login', async (req, res) => {
   }
 });
 
-// 获取全量数据
+// 获取全部数据
 app.get('/api/getAllData', async (req, res) => {
   try {
     const data = await readData();
@@ -79,7 +78,7 @@ app.get('/api/getAllData', async (req, res) => {
   }
 });
 
-// 读取单人员工所有日期数据
+// 获取单个员工工时
 app.get('/api/getStaffWork/:staffId', async (req, res) => {
   try {
     const data = await readData();
@@ -89,7 +88,7 @@ app.get('/api/getStaffWork/:staffId', async (req, res) => {
   }
 });
 
-// 保存指定日期工时
+// 保存工时
 app.post('/api/saveWorkData', async (req, res) => {
   try {
     const data = await readData();
@@ -134,7 +133,7 @@ app.delete('/api/delStaff/:id', async (req, res) => {
   }
 });
 
-// 管理员批量删除年月数据
+// 批量删除年月数据
 app.post('/api/admin/batchDeleteWork', async (req, res) => {
   try {
     const { username, pwd, staffId, year, month } = req.body;
@@ -144,14 +143,12 @@ app.post('/api/admin/batchDeleteWork', async (req, res) => {
     }
     const prefix = `${year}-${String(month).padStart(2, '0')}`;
     if (staffId) {
-      // 删除单个员工指定年月
       if (data.workData[staffId]) {
         Object.keys(data.workData[staffId]).forEach(key => {
           if (key.startsWith(prefix)) delete data.workData[staffId][key];
         });
       }
     } else {
-      // 删除全部员工指定年月
       Object.values(data.workData).forEach(person => {
         Object.keys(person).forEach(key => {
           if (key.startsWith(prefix)) delete person[key];
@@ -162,6 +159,24 @@ app.post('/api/admin/batchDeleteWork', async (req, res) => {
     res.json({ code: 0, msg: "数据删除成功" });
   } catch (err) {
     res.json({ code: -1, msg: "删除失败" });
+  }
+});
+
+// ========== 新增接口：修改管理员密码 ==========
+app.post('/api/updateAdminPwd', async (req, res) => {
+  try {
+    const { oldPwd, newPwd } = req.body;
+    const data = await readData();
+    // 校验原密码
+    if (data.admin.pwd !== oldPwd) {
+      return res.json({ code: 1, msg: "原密码输入错误" });
+    }
+    // 更新密码
+    data.admin.pwd = newPwd;
+    await writeData(data);
+    res.json({ code: 0, msg: "管理员密码修改成功，请使用新密码重新登录" });
+  } catch (err) {
+    res.json({ code: -1, msg: "修改失败" });
   }
 });
 
