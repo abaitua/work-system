@@ -58,14 +58,18 @@ async function clearAllLog() {
   await redis.set(LOG_KEY, DEFAULT_LOG);
 }
 
-// 时间格式化：UTC 转为 YYYY-MM-DD HH:mm:ss
-function formatUTCDate(date) {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  const h = String(date.getUTCHours()).padStart(2, '0');
-  const m = String(date.getUTCMinutes()).padStart(2, '0');
-  const s = String(date.getUTCSeconds()).padStart(2, '0');
+// 格式化 中国时区(UTC+8) 时间 YYYY-MM-DD HH:mm:ss
+function formatCSTDate() {
+  const now = new Date();
+  // 东八区 = UTC + 8小时
+  const offset = 8 * 60 * 60 * 1000;
+  const cstTime = new Date(now.getTime() + offset);
+  const year = cstTime.getUTCFullYear();
+  const month = String(cstTime.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(cstTime.getUTCDate()).padStart(2, '0');
+  const h = String(cstTime.getUTCHours()).padStart(2, '0');
+  const m = String(cstTime.getUTCMinutes()).padStart(2, '0');
+  const s = String(cstTime.getUTCSeconds()).padStart(2, '0');
   return `${year}-${month}-${day} ${h}:${m}:${s}`;
 }
 
@@ -120,7 +124,7 @@ app.get('/api/getStaffWork/:staffId', async (req, res) => {
   }
 });
 
-// 保存工时 + UTC 时间日志
+// 保存工时 + 中国时区日志
 app.post('/api/saveWorkData', async (req, res) => {
   try {
     const data = await readData();
@@ -134,8 +138,7 @@ app.post('/api/saveWorkData', async (req, res) => {
       detailStr += `${WORK_LIST[idx]}:${val}工时；`;
     });
 
-    const now = new Date();
-    const timeStr = formatUTCDate(now);
+    const timeStr = formatCSTDate();
     const logDate = day;
     await addLog({
       time: timeStr,
@@ -244,8 +247,7 @@ app.post('/api/admin/updateStaffPwd', async (req, res) => {
     staff.pwd = newPwd;
     await writeData(data);
 
-    const now = new Date();
-    const timeStr = formatUTCDate(now);
+    const timeStr = formatCSTDate();
     await addLog({
       time: timeStr,
       logDate: "",
@@ -295,8 +297,7 @@ app.post('/api/admin/clearLog', async (req, res) => {
     }
     await clearAllLog();
 
-    const now = new Date();
-    const timeStr = formatUTCDate(now);
+    const timeStr = formatCSTDate();
     await addLog({
       time: timeStr,
       logDate: "",
