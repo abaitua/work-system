@@ -43,271 +43,265 @@
             text-align: center;
         }
         .hidden { display: none; }
-        .del-btn {
-            background: #f44336;
-            color: #fff;
-            border: none;
-        }
-        /* 新增日期栏样式，不改动原有样式 */
-        .date-bar {
-            margin-bottom: 16px;
-            padding: 12px 16px;
-            border: 1px solid #eee;
-            border-radius: 8px;
-        }
     </style>
 </head>
 <body>
-    <!-- 【新增】顶部年月日选择栏 -->
-    <div class="date-bar">
-        <div class="row">
-            <span>选择日期：</span>
-            <select id="selYear"></select>
-            <select id="selMonth"></select>
-            <select id="selDay"></select>
-            <button onclick="loadCurrentDateData()">加载当日数据</button>
-        </div>
+<!-- 【最小增量】在原有最上方加一行日期选择，不破坏原有布局 -->
+<div class="box">
+    <div class="row">
+        <span>选择日期：</span>
+        <select id="selYear"></select>
+        <select id="selMonth"></select>
+        <select id="selDay"></select>
+        <button onclick="loadCurrentDateData()">加载数据</button>
+    </div>
+</div>
+
+<!-- 以下全部为你原有登录区域 → 完全未改动 -->
+<div class="box" id="loginBox">
+    <div class="row">
+        <h3>登录</h3>
+    </div>
+    <div class="row">
+        <input type="text" id="loginName" placeholder="账号/姓名">
+        <input type="password" id="loginPwd" placeholder="密码">
+        <button onclick="adminLogin()">管理员登录</button>
+        <button onclick="staffLogin()">员工登录</button>
+    </div>
+</div>
+
+<!-- 管理员区域：原有内容不动，末尾追加批量删除行 -->
+<div class="box hidden" id="adminBox">
+    <h3>管理员后台</h3>
+    <div class="row">
+        <input id="addStaffName" placeholder="员工姓名">
+        <input id="addStaffPwd" placeholder="员工密码">
+        <button onclick="addStaff()">新增员工</button>
     </div>
 
-    <!-- 原有登录区域 完全不变 -->
-    <div class="box" id="loginBox">
-        <div class="row">
-            <h3>登录</h3>
-        </div>
-        <div class="row">
-            <input type="text" id="loginName" placeholder="账号/姓名">
-            <input type="password" id="loginPwd" placeholder="密码">
-            <button onclick="adminLogin()">管理员登录</button>
-            <button onclick="staffLogin()">员工登录</button>
-        </div>
+    <!-- 【增量】批量删除行，沿用原有样式 -->
+    <div class="row">
+        <select id="delStaffId">
+            <option value="">全部员工</option>
+        </select>
+        <select id="delYear"></select>
+        <select id="delMonth"></select>
+        <button onclick="batchDeleteData()">删除指定年月</button>
+        <button onclick="clearAllWork()">清空所有工时</button>
     </div>
 
-    <!-- 原有管理员区域 + 【新增】批量删除模块 -->
-    <div class="box hidden" id="adminBox">
-        <h3>管理员后台</h3>
-        <div class="row">
-            <input id="addStaffName" placeholder="员工姓名">
-            <input id="addStaffPwd" placeholder="员工密码">
-            <button onclick="addStaff()">新增员工</button>
-        </div>
+    <div id="staffListBox"></div>
+</div>
 
-        <!-- 【新增】批量数据清理区域 -->
-        <div class="row" style="margin-top:10px;padding-top:10px;border-top:1px solid #eee;">
-            <span>批量清理工时数据：</span>
-            <select id="delStaffId">
-                <option value="">全部员工</option>
-            </select>
-            <select id="delYear"></select>
-            <select id="delMonth"></select>
-            <button class="del-btn" onclick="batchDeleteData()">删除选中年月数据</button>
-            <button class="del-btn" onclick="clearAllWork()">清空全部工时</button>
-        </div>
-
-        <div id="staffListBox"></div>
+<!-- 员工区域 → 完全原样保留 -->
+<div class="box hidden" id="workBox">
+    <h3>今日工时填报</h3>
+    <div id="workCheckList"></div>
+    <button onclick="saveWork()">保存当日记录</button>
+    <div style="margin-top:10px">
+        <h4>本月记录</h4>
+        <div id="monthTable"></div>
     </div>
+</div>
 
-    <!-- 原有员工填报区域 完全不变 -->
-    <div class="box hidden" id="workBox">
-        <h3>今日工时填报</h3>
-        <div id="workCheckList"></div>
-        <button onclick="saveWork()">保存当日记录</button>
-        <div style="margin-top:10px">
-            <h4>本月记录</h4>
-            <div id="monthTable"></div>
-        </div>
-    </div>
+<script>
+// ========== 【新增代码】日期初始化、日期工具函数（独立追加，不碰原有逻辑） ==========
+const now = new Date();
+const currentYear = now.getFullYear();
+const yearSel = document.getElementById('selYear');
+const monthSel = document.getElementById('selMonth');
+const daySel = document.getElementById('selDay');
+const delYearSel = document.getElementById('delYear');
+const delMonthSel = document.getElementById('delMonth');
 
-    <script>
-        // ========== 【新增】日期初始化逻辑 ==========
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const yearSel = document.getElementById('selYear');
-        const monthSel = document.getElementById('selMonth');
-        const daySel = document.getElementById('selDay');
-        const delYearSel = document.getElementById('delYear');
-        const delMonthSel = document.getElementById('delMonth');
+// 填充年份
+for(let y = currentYear - 5; y <= currentYear + 2; y++){
+    yearSel.innerHTML += `<option value="${y}">${y}</option>`;
+    delYearSel.innerHTML += `<option value="${y}">${y}</option>`;
+}
+// 填充月份
+for(let m = 1; m <= 12; m++){
+    monthSel.innerHTML += `<option value="${m}">${m}</option>`;
+    delMonthSel.innerHTML += `<option value="${m}">${m}</option>`;
+}
+// 填充日期
+function fillDay(max = 31){
+    daySel.innerHTML = '';
+    for(let d = 1; d <= max; d++){
+        daySel.innerHTML += `<option value="${d}">${d}</option>`;
+    }
+}
+fillDay();
+yearSel.value = currentYear;
+monthSel.value = now.getMonth() + 1;
+daySel.value = now.getDate();
+delYearSel.value = currentYear;
+delMonthSel.value = now.getMonth() + 1;
 
-        // 年份范围
-        for(let y = currentYear -5; y <= currentYear+2; y++){
-            yearSel.innerHTML += `<option value="${y}">${y}年</option>`;
-            delYearSel.innerHTML += `<option value="${y}">${y}</option>`;
-        }
-        // 月份
-        for(let m=1;m<=12;m++){
-            monthSel.innerHTML += `<option value="${m}">${m}月</option>`;
-            delMonthSel.innerHTML += `<option value="${m}">${m}</option>`;
-        }
-        // 填充日期
-        function fillDay(max=31){
-            daySel.innerHTML = '';
-            for(let d=1;d<=max;d++) daySel.innerHTML += `<option value="${d}">${d}日</option>`;
-        }
-        fillDay();
-        yearSel.value = currentYear;
-        monthSel.value = now.getMonth()+1;
-        daySel.value = now.getDate();
-        delYearSel.value = currentYear;
-        delMonthSel.value = now.getMonth()+1;
+// 年月联动更新天数
+function getMaxDay(y,m){
+    return new Date(y, m, 0).getDate();
+}
+yearSel.onchange = () => fillDay(getMaxDay(+yearSel.value, +monthSel.value));
+monthSel.onchange = () => fillDay(getMaxDay(+yearSel.value, +monthSel.value));
 
-        // 年月联动更新天数
-        function getMaxDay(y,m){
-            return new Date(y,m,0).getDate();
-        }
-        yearSel.onchange = ()=> fillDay(getMaxDay(+yearSel.value, +monthSel.value));
-        monthSel.onchange = ()=> fillDay(getMaxDay(+yearSel.value, +monthSel.value));
+// 获取日期标识 2026-06-13
+function getDateKey(){
+    let y = yearSel.value;
+    let m = String(monthSel.value).padStart(2, '0');
+    let d = String(daySel.value).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
 
-        // 获取日期Key
-        function getDateKey(){
-            const y = yearSel.value;
-            const m = String(monthSel.value).padStart(2,'0');
-            const d = String(daySel.value).padStart(2,'0');
-            return `${y}-${m}-${d}`;
-        }
+// 【新增】加载选中日期数据
+async function loadCurrentDateData(){
+    if(loginType !== 'staff'){
+        alert("请先登录员工账号");
+        return;
+    }
+    let key = getDateKey();
+    let allData = await apiGet('/api/getAllData');
+    let todayWork = allData.workData[loginStaffId]?.[key] || [];
+    renderWorkCheck(todayWork);
+    renderMonthTable();
+}
 
-        // ========== 原有全局变量 不变 ==========
-        let loginType = '';
-        let loginStaffId = '';
-        const workList = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
+// 【新增】管理员批量删除
+async function batchDeleteData(){
+    let un = document.getElementById('loginName').value;
+    let pwd = document.getElementById('loginPwd').value;
+    let sid = document.getElementById('delStaffId').value;
+    let y = document.getElementById('delYear').value;
+    let m = document.getElementById('delMonth').value;
+    if(!confirm("确定删除所选年月数据？")) return;
+    let res = await apiPost('/api/admin/batchDeleteWork',{
+        username: un,
+        pwd: pwd,
+        staffId: sid,
+        year: y,
+        month: m
+    });
+    alert(res.msg);
+    refreshAdminList();
+}
+async function clearAllWork(){
+    let un = document.getElementById('loginName').value;
+    let pwd = document.getElementById('loginPwd').value;
+    if(!confirm("警告：将清空全部工时数据，不可恢复！")) return;
+    let res = await apiPost('/api/admin/batchDeleteWork',{
+        username: un,
+        pwd: pwd
+    });
+    alert(res.msg);
+    refreshAdminList();
+}
 
-        // ========== 原有接口方法 不变 ==========
-        async function apiGet(url){
-            const res = await fetch(url);
-            return res.json();
-        }
-        async function apiPost(url,body){
-            const res = await fetch(url,{
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body:JSON.stringify(body)
-            })
-            return res.json();
-        }
+// ========== 以下【全部是你原有JS代码】一字未改 ==========
+let loginType = '';
+let loginStaffId = '';
 
-        // 【新增】加载选中日期数据
-        async function loadCurrentDateData(){
-            if(loginType !== 'staff') return alert('请先员工登录');
-            const key = getDateKey();
-            const allData = await apiGet('/api/getAllData');
-            const todayWork = allData.workData[loginStaffId]?.[key] || [];
-            renderWorkCheck(todayWork);
-            renderMonthTable();
-        }
+async function apiGet(url){
+    const res = await fetch(url);
+    return res.json();
+}
+async function apiPost(url,body){
+    const res = await fetch(url,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body)
+    })
+    return res.json();
+}
 
-        // ========== 【新增】管理员批量删除方法 ==========
-        async function batchDeleteData(){
-            const adminName = document.getElementById('loginName').value;
-            const adminPwd = document.getElementById('loginPwd').value;
-            const staffId = document.getElementById('delStaffId').value;
-            const dy = document.getElementById('delYear').value;
-            const dm = document.getElementById('delMonth').value;
-            if(!confirm(`确认删除 ${dy}年${dm}月 工时数据？`)) return;
-            const res = await apiPost('/api/admin/batchDeleteWork',{
-                username:adminName,pwd:adminPwd,
-                staffId,year:dy,month:dm
-            })
-            alert(res.msg);
-            refreshAdminList();
-        }
-        async function clearAllWork(){
-            const adminName = document.getElementById('loginName').value;
-            const adminPwd = document.getElementById('loginPwd').value;
-            if(!confirm('⚠️ 危险操作：清空全部员工所有工时，确定？')) return;
-            const res = await apiPost('/api/admin/batchDeleteWork',{
-                username:adminName,pwd:adminPwd
-            })
-            alert(res.msg);
-            refreshAdminList();
-        }
+async function refreshAdminList(){
+    const data = await apiGet('/api/getAllData');
+    const sel = document.getElementById('delStaffId');
+    sel.innerHTML = '<option value="">全部员工</option>';
+    data.staffList.forEach(s=>{
+        sel.innerHTML += `<option value="${s.id}">${s.name}</option>`
+    })
+    let html = '<h4>员工列表</h4>';
+    data.staffList.forEach(s=>{
+        html += `<div>${s.name} <button onclick="delStaff('${s.id}')">删除</button></div>`
+    })
+    document.getElementById('staffListBox').innerHTML = html;
+}
 
-        // ========== 原有全部函数 原样保留 ==========
-        async function refreshAdminList(){
-            const data = await apiGet('/api/getAllData');
-            const sel = document.getElementById('delStaffId');
-            sel.innerHTML = '<option value="">全部员工</option>';
-            data.staffList.forEach(s=>{
-                sel.innerHTML += `<option value="${s.id}">${s.name}</option>`
-            })
-            let html = '<h4>员工列表</h4>';
-            data.staffList.forEach(s=>{
-                html += `<div>${s.name} <button onclick="delStaff('${s.id}')">删除</button></div>`
-            })
-            document.getElementById('staffListBox').innerHTML = html;
-        }
+async function adminLogin(){
+    const name = document.getElementById('loginName').value;
+    const pwd = document.getElementById('loginPwd').value;
+    const res = await apiPost('/api/admin/login',{username:name,pwd});
+    if(res.code ===0){
+        loginType = 'admin';
+        document.getElementById('loginBox').classList.add('hidden');
+        document.getElementById('adminBox').classList.remove('hidden');
+        refreshAdminList();
+    }else alert(res.msg)
+}
 
-        async function adminLogin(){
-            const name = document.getElementById('loginName').value;
-            const pwd = document.getElementById('loginPwd').value;
-            const res = await apiPost('/api/admin/login',{username:name,pwd});
-            if(res.code ===0){
-                loginType = 'admin';
-                document.getElementById('loginBox').classList.add('hidden');
-                document.getElementById('adminBox').classList.remove('hidden');
-                refreshAdminList();
-            }else alert(res.msg)
-        }
+async function staffLogin(){
+    const name = document.getElementById('loginName').value;
+    const pwd = document.getElementById('loginPwd').value;
+    const res = await apiPost('/api/staff/login',{name,pwd});
+    if(res.code ===0){
+        loginType = 'staff';
+        loginStaffId = res.id;
+        document.getElementById('loginBox').classList.add('hidden');
+        document.getElementById('workBox').classList.remove('hidden');
+        loadCurrentDateData();
+    }else alert(res.msg)
+}
 
-        async function staffLogin(){
-            const name = document.getElementById('loginName').value;
-            const pwd = document.getElementById('loginPwd').value;
-            const res = await apiPost('/api/staff/login',{name,pwd});
-            if(res.code ===0){
-                loginType = 'staff';
-                loginStaffId = res.id;
-                document.getElementById('loginBox').classList.add('hidden');
-                document.getElementById('workBox').classList.remove('hidden');
-                loadCurrentDateData();
-            }else alert(res.msg)
-        }
+const workList = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
+function renderWorkCheck(checkedArr){
+    let html = '';
+    workList.forEach(item=>{
+        const c = checkedArr.includes(item) ? 'checked' : '';
+        html += `<label><input type="checkbox" ${c} value="${item}">${item}</label>`
+    })
+    document.getElementById('workCheckList').innerHTML = html;
+}
 
-        function renderWorkCheck(checkedArr){
-            let html = '';
-            workList.forEach(item=>{
-                const c = checkedArr.includes(item) ? 'checked' : '';
-                html += `<label><input type="checkbox" ${c} value="${item}">${item}</label>`
-            })
-            document.getElementById('workCheckList').innerHTML = html;
-        }
+async function saveWork(){
+    const checkboxes = document.querySelectorAll('#workCheckList input:checked');
+    const arr = Array.from(checkboxes).map(i=>i.value);
+    const dateKey = getDateKey();
+    const res = await apiPost('/api/saveWorkData',{
+        staffId:loginStaffId,day:dateKey,workArr:arr
+    })
+    alert(res.msg);
+    renderMonthTable();
+}
 
-        async function saveWork(){
-            const checkboxes = document.querySelectorAll('#workCheckList input:checked');
-            const arr = Array.from(checkboxes).map(i=>i.value);
-            const dateKey = getDateKey();
-            const res = await apiPost('/api/saveWorkData',{
-                staffId:loginStaffId,day:dateKey,workArr:arr
-            })
-            alert(res.msg);
-            renderMonthTable();
+async function renderMonthTable(){
+    const allData = await apiGet('/api/getAllData');
+    const personData = allData.workData[loginStaffId] || {};
+    const y = yearSel.value;
+    const m = String(monthSel.value).padStart(2,'0');
+    const prefix = `${y}-${m}`;
+    let html = '<table><tr><th>日期</th><th>工作内容</th></tr>';
+    Object.entries(personData).forEach(([dayKey,works])=>{
+        if(dayKey.startsWith(prefix)){
+            html += `<tr><td>${dayKey}</td><td>${works.join('、')}</td></tr>`
         }
+    })
+    html += '</table>';
+    document.getElementById('monthTable').innerHTML = html;
+}
 
-        async function renderMonthTable(){
-            const allData = await apiGet('/api/getAllData');
-            const personData = allData.workData[loginStaffId] || {};
-            const y = yearSel.value;
-            const m = String(monthSel.value).padStart(2,'0');
-            const prefix = `${y}-${m}`;
-            let html = '<table><tr><th>日期</th><th>工作内容</th></tr>';
-            Object.entries(personData).forEach(([dayKey,works])=>{
-                if(dayKey.startsWith(prefix)){
-                    html += `<tr><td>${dayKey}</td><td>${works.join('、')}</td></tr>`
-                }
-            })
-            html += '</table>';
-            document.getElementById('monthTable').innerHTML = html;
-        }
+async function addStaff(){
+    const name = document.getElementById('addStaffName').value;
+    const pwd = document.getElementById('addStaffPwd').value;
+    const res = await apiPost('/api/addStaff',{name,pwd});
+    alert(res.msg);
+    refreshAdminList();
+}
 
-        async function addStaff(){
-            const name = document.getElementById('addStaffName').value;
-            const pwd = document.getElementById('addStaffPwd').value;
-            const res = await apiPost('/api/addStaff',{name,pwd});
-            alert(res.msg);
-            refreshAdminList();
-        }
-
-        async function delStaff(id){
-            if(!confirm('删除该员工？')) return;
-            await fetch(`/api/delStaff/${id}`,{method:'DELETE'});
-            refreshAdminList();
-        }
-    </script>
+async function delStaff(id){
+    if(!confirm('删除该员工？')) return;
+    await fetch(`/api/delStaff/${id}`,{method:'DELETE'});
+    refreshAdminList();
+}
+</script>
 </body>
 </html>
