@@ -1,12 +1,14 @@
 const express = require('express');
-const { kv } = require('@vercel/kv');
+const { Redis } = require('@upstash/redis');
 const path = require('path');
 const app = express();
+
+// 自动读取Vercel注入的环境变量初始化Redis
+const redis = Redis.fromEnv();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..')));
 
-// 全局常量
 const DATA_KEY = "work_system_data";
 const DAY_COUNT = 30;
 const WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
@@ -18,25 +20,25 @@ async function initDefaultData() {
     staffList: [],
     workData: {}
   };
-  await kv.set(DATA_KEY, initData);
+  await redis.set(DATA_KEY, initData);
   return initData;
 }
 
-// 读取数据（从KV数据库）
+// 读取数据
 async function readData() {
-  let data = await kv.get(DATA_KEY);
+  let data = await redis.get(DATA_KEY);
   if (!data) {
     data = await initDefaultData();
   }
   return data;
 }
 
-// 写入数据（保存到KV数据库）
+// 写入数据
 async function writeData(data) {
-  await kv.set(DATA_KEY, data);
+  await redis.set(DATA_KEY, data);
 }
 
-// 根路由 → 打开首页
+// 根路由
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
@@ -70,7 +72,7 @@ app.get('/api/getAllData', async (req, res) => {
   res.json(data);
 });
 
-// 保存员工每日工时
+// 保存工时
 app.post('/api/saveWorkData', async (req, res) => {
   const { staffId, day, workArr } = req.body;
   const data = await readData();
@@ -80,7 +82,7 @@ app.post('/api/saveWorkData', async (req, res) => {
   res.json({ code: 0, msg: "保存成功" });
 });
 
-// 读取单人员工工时
+// 读取单人数据
 app.get('/api/getStaffWork/:staffId', async (req, res) => {
   const staffId = req.params.staffId;
   const data = await readData();
@@ -110,5 +112,4 @@ app.delete('/api/delStaff/:id', async (req, res) => {
   res.json({ code: 0, msg: "删除成功" });
 });
 
-// Vercel 必须导出，禁止 app.listen
 module.exports = app;
