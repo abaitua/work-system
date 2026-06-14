@@ -230,6 +230,65 @@ const DEFAULT_TIME_MAP = {
     "核对物料": 10
 };
 
+// 本地存储键名
+const STORAGE_KEY_LOGIN = "work_system_login";
+const STORAGE_KEY_TIME = "work_system_time_map";
+
+// 读取本地工时配置
+function loadLocalTimeMap() {
+    const local = localStorage.getItem(STORAGE_KEY_TIME);
+    if(local){
+        try{
+            WORK_TIME_MAP = JSON.parse(local);
+        }catch(e){
+            WORK_TIME_MAP = {...DEFAULT_TIME_MAP};
+        }
+    }else{
+        WORK_TIME_MAP = {...DEFAULT_TIME_MAP};
+    }
+}
+
+// 保存工时配置到本地
+function saveLocalTimeMap() {
+    localStorage.setItem(STORAGE_KEY_TIME, JSON.stringify(WORK_TIME_MAP));
+}
+
+// 保存登录状态到本地
+function saveLoginStatus(type, data) {
+    localStorage.setItem(STORAGE_KEY_LOGIN, JSON.stringify({type, data}));
+}
+
+// 清除本地登录状态
+function clearLoginStatus() {
+    localStorage.removeItem(STORAGE_KEY_LOGIN);
+}
+
+// 自动恢复登录
+async function autoLogin() {
+    const loginStr = localStorage.getItem(STORAGE_KEY_LOGIN);
+    if(!loginStr) return false;
+    try{
+        const loginInfo = JSON.parse(loginStr);
+        const {type, data} = loginInfo;
+        if(type === "staff"){
+            currStaffId = data.id;
+            currStaffName = data.name;
+            document.getElementById('currStaffName').innerText = currStaffName;
+            showPage('pageStaffDate');
+            return true;
+        }else if(type === "admin"){
+            adminUsername = data.username;
+            adminPwd = data.pwd;
+            showPage('pageAdmin');
+            await renderAdminPage();
+            refreshTotalTable();
+            return true;
+        }
+    }catch(e){}
+    clearLoginStatus();
+    return false;
+}
+
 // 北京时间转换
 function formatChinaTime(timeStr) {
     const date = new Date(timeStr);
@@ -264,6 +323,7 @@ function logout() {
     adminUsername = "";
     adminPwd = "";
     ALL_WORK_DATA = {};
+    clearLoginStatus();
     showPage('pageLogin');
 }
 
@@ -330,10 +390,8 @@ async function loadBaseData() {
     } catch (e) {
         WORK_LIST = ["首件", "巡检", "入库", "出货", "外箱标", "内箱标", "特标", "工单打印", "核对物料"];
     }
-    WORK_TIME_MAP = {};
-    WORK_LIST.forEach(name => {
-        WORK_TIME_MAP[name] = DEFAULT_TIME_MAP[name] || 10;
-    });
+    // 优先使用本地持久化工时配置
+    loadLocalTimeMap();
 }
 
 async function staffLogin() {
@@ -351,6 +409,8 @@ async function staffLogin() {
         if (json.code === 0) {
             currStaffId = json.id;
             currStaffName = json.name;
+            // 保存登录状态
+            saveLoginStatus("staff", {id: json.id, name: json.name});
             document.getElementById('currStaffName').innerText = currStaffName;
             showPage('pageStaffDate');
         } else {
@@ -443,6 +503,8 @@ async function adminLogin() {
         if (json.code === 0) {
             adminUsername = user;
             adminPwd = pwd;
+            // 保存管理员登录状态
+            saveLoginStatus("admin", {username: user, pwd: pwd});
             showPage('pageAdmin');
             await renderAdminPage();
             refreshTotalTable();
@@ -537,8 +599,11 @@ async function saveWorkList() {
         const json = await res.json();
         if (json.code === 0) {
             WORK_LIST = newList;
-            WORK_TIME_MAP = {};
-            WORK_LIST.forEach(name => WORK_TIME_MAP[name] = DEFAULT_TIME_MAP[name] || 10);
+            // 重置新增工作项工时并持久化
+            WORK_LIST.forEach(name => {
+                if(!WORK_TIME_MAP[name]) WORK_TIME_MAP[name] = 10;
+            });
+            saveLocalTimeMap();
             alert("保存成功");
             backToAdmin();
         } else {
@@ -568,14 +633,24 @@ function renderTimeConfig() {
         wrap.appendChild(div);
     });
 }
-function saveTimeConfig() {
+async function saveTimeConfig() {
     const inputs = document.querySelectorAll(".time-config-row input");
     inputs.forEach(inp => {
         const name = inp.dataset.name;
         const val = Number(inp.value) || 0;
         WORK_TIME_MAP[name] = val;
     });
-    alert("工时标准配置保存成功");
+    // 1. 保存到本地持久化
+    saveLocalTimeMap();
+    // 2. 同步保存到后端（全局生效）
+    try {
+        await fetch(`${API_BASE}/api/saveTimeConfig`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(WORK_TIME_MAP)
+        });
+    } catch (e) {}
+    alert("工时标准配置保存成功，全局已生效");
     backToAdmin();
 }
 
@@ -806,7 +881,11 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     initDateSelect();
     await loadBaseData();
-    showPage('pageLogin');
+    // 页面加载自动恢复登录
+    const hasAutoLogin = await autoLogin();
+    if(!hasAutoLogin){
+        showPage('pageLogin');
+    }
 });
 </script>
 </body>
