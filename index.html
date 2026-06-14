@@ -216,7 +216,7 @@ let currStaffId = "";
 let currStaffName = "";
 let adminUsername = "";
 let adminPwd = "";
-let allStaffWorkData = {};
+let ALL_WORK_DATA = {};
 
 const DEFAULT_TIME_MAP = {
     "首件": 20,
@@ -251,9 +251,9 @@ function showPage(pageId) {
 function switchLogin(type) {
     document.getElementById('staffLogin').classList.add('hide');
     document.getElementById('adminLogin').classList.add('hide');
-    if(type === 'staff'){
+    if (type === 'staff') {
         document.getElementById('staffLogin').classList.remove('hide');
-    }else{
+    } else {
         document.getElementById('adminLogin').classList.remove('hide');
     }
 }
@@ -263,7 +263,7 @@ function logout() {
     currStaffName = "";
     adminUsername = "";
     adminPwd = "";
-    allStaffWorkData = {};
+    ALL_WORK_DATA = {};
     showPage('pageLogin');
 }
 
@@ -324,11 +324,11 @@ async function loadBaseData() {
     try {
         const res = await fetch(`${API_BASE}/api/getWorkList`);
         const json = await res.json();
-        if(json.code === 0){
+        if (json.code === 0) {
             WORK_LIST = json.list || [];
         }
     } catch (e) {
-        WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
+        WORK_LIST = ["首件", "巡检", "入库", "出货", "外箱标", "内箱标", "特标", "工单打印", "核对物料"];
     }
     WORK_TIME_MAP = {};
     WORK_LIST.forEach(name => {
@@ -339,7 +339,7 @@ async function loadBaseData() {
 async function staffLogin() {
     const name = document.getElementById('staffName').value.trim();
     const pwd = document.getElementById('staffPwd').value.trim();
-    if(!name || !pwd) return alert("请输入姓名和密码");
+    if (!name || !pwd) return alert("请输入姓名和密码");
 
     try {
         const res = await fetch(`${API_BASE}/api/staff/login`, {
@@ -348,12 +348,12 @@ async function staffLogin() {
             body: JSON.stringify({ name, pwd })
         });
         const json = await res.json();
-        if(json.code === 0){
+        if (json.code === 0) {
             currStaffId = json.id;
             currStaffName = json.name;
             document.getElementById('currStaffName').innerText = currStaffName;
             showPage('pageStaffDate');
-        }else{
+        } else {
             alert(json.msg || "登录失败");
         }
     } catch (e) {
@@ -375,7 +375,7 @@ async function goDetail() {
         const res = await fetch(`${API_BASE}/api/getStaffWork/${currStaffId}`);
         const json = await res.json();
         workArr = json[dateStr] || [];
-    } catch (e) {}
+    } catch (e) { }
 
     const table = document.getElementById('detailTable');
     table.innerHTML = "";
@@ -431,7 +431,7 @@ async function saveStaffWork() {
 async function adminLogin() {
     const user = document.getElementById('adminUser').value.trim();
     const pwd = document.getElementById('adminPwd').value.trim();
-    if(!user || !pwd) return alert("请输入账号密码");
+    if (!user || !pwd) return alert("请输入账号密码");
 
     try {
         const res = await fetch(`${API_BASE}/api/admin/login`, {
@@ -440,13 +440,13 @@ async function adminLogin() {
             body: JSON.stringify({ username: user, pwd })
         });
         const json = await res.json();
-        if(json.code === 0){
+        if (json.code === 0) {
             adminUsername = user;
             adminPwd = pwd;
             showPage('pageAdmin');
             await renderAdminPage();
             refreshTotalTable();
-        }else{
+        } else {
             alert(json.msg || "登录失败");
         }
     } catch (e) {
@@ -459,11 +459,10 @@ async function renderAdminPage() {
         const res = await fetch(`${API_BASE}/api/getAllData`);
         const json = await res.json();
         STAFF_LIST = json.staffList || [];
-        // 兼容后端两种字段 allWorkData / allStaffWorkData
-        allStaffWorkData = json.allWorkData || json.allStaffWorkData || {};
+        ALL_WORK_DATA = json.workData || {};
     } catch (e) {
         STAFF_LIST = [];
-        allStaffWorkData = {};
+        ALL_WORK_DATA = {};
     }
 
     const staffSel = document.getElementById('delStaffSel');
@@ -517,7 +516,6 @@ function addWorkItem() {
     `;
     wrap.appendChild(div);
 }
-// 修复删除按钮
 function delWorkItem(btn) {
     btn.parentElement.remove();
 }
@@ -526,9 +524,9 @@ async function saveWorkList() {
     const newList = [];
     inputs.forEach(inp => {
         const val = inp.value.trim();
-        if(val) newList.push(val);
+        if (val) newList.push(val);
     });
-    if(newList.length === 0) return alert("工作项不能为空");
+    if (newList.length === 0) return alert("工作项不能为空");
 
     try {
         const res = await fetch(`${API_BASE}/api/saveWorkList`, {
@@ -537,13 +535,13 @@ async function saveWorkList() {
             body: JSON.stringify({ list: newList })
         });
         const json = await res.json();
-        if(json.code === 0){
+        if (json.code === 0) {
             WORK_LIST = newList;
             WORK_TIME_MAP = {};
             WORK_LIST.forEach(name => WORK_TIME_MAP[name] = DEFAULT_TIME_MAP[name] || 10);
             alert("保存成功");
             backToAdmin();
-        }else{
+        } else {
             alert(json.msg);
         }
     } catch (e) {
@@ -584,7 +582,7 @@ function saveTimeConfig() {
 async function addStaff() {
     const name = document.getElementById('newStaffName').value.trim();
     const pwd = document.getElementById('newStaffPwd').value.trim();
-    if(!name || !pwd) return alert("请填写姓名和密码");
+    if (!name || !pwd) return alert("请填写姓名和密码");
 
     try {
         const res = await fetch(`${API_BASE}/api/addStaff`, {
@@ -594,7 +592,7 @@ async function addStaff() {
         });
         const json = await res.json();
         alert(json.msg);
-        if(json.code === 0){
+        if (json.code === 0) {
             document.getElementById('newStaffName').value = "";
             document.getElementById('newStaffPwd').value = "";
             await renderAdminPage();
@@ -606,14 +604,14 @@ async function addStaff() {
 }
 
 async function delStaff(id) {
-    if(!confirm("确定删除该员工？关联数据一并清除")) return;
+    if (!confirm("确定删除该员工？关联数据一并清除")) return;
     try {
         const res = await fetch(`${API_BASE}/api/delStaff/${id}`, {
             method: "DELETE"
         });
         const json = await res.json();
         alert(json.msg);
-        if(json.code === 0) {
+        if (json.code === 0) {
             await renderAdminPage();
             refreshTotalTable();
         }
@@ -624,8 +622,8 @@ async function delStaff(id) {
 
 async function updateStaffPwd(staffId) {
     const newPwd = document.getElementById(`editPwd_${staffId}`).value.trim();
-    if(!newPwd) return alert("请输入新密码");
-    if(newPwd.length < 3) return alert("密码长度不能小于3位");
+    if (!newPwd) return alert("请输入新密码");
+    if (newPwd.length < 3) return alert("密码长度不能小于3位");
 
     try {
         const res = await fetch(`${API_BASE}/api/admin/updateStaffPwd`, {
@@ -640,7 +638,7 @@ async function updateStaffPwd(staffId) {
         });
         const json = await res.json();
         alert(json.msg);
-        if(json.code === 0) await renderAdminPage();
+        if (json.code === 0) await renderAdminPage();
     } catch (e) {
         alert("请求失败");
     }
@@ -650,7 +648,7 @@ async function delMonthData() {
     const staffId = document.getElementById('delStaffSel').value;
     const y = document.getElementById('delYearSel').value;
     const m = document.getElementById('delMonthSel').value;
-    if(!confirm("确定删除该月份数据？")) return;
+    if (!confirm("确定删除该月份数据？")) return;
 
     try {
         const res = await fetch(`${API_BASE}/api/admin/batchDeleteWork`, {
@@ -666,7 +664,7 @@ async function delMonthData() {
         });
         const json = await res.json();
         alert(json.msg);
-        if(json.code === 0) {
+        if (json.code === 0) {
             await renderAdminPage();
             refreshTotalTable();
         }
@@ -679,9 +677,9 @@ async function updateAdminPwd() {
     const oldPwd = document.getElementById('oldAdminPwd').value.trim();
     const newPwd = document.getElementById('newAdminPwd').value.trim();
     const confirmPwd = document.getElementById('confirmAdminPwd').value.trim();
-    if(!oldPwd || !newPwd || !confirmPwd) return alert("请完整填写");
-    if(newPwd !== confirmPwd) return alert("两次新密码不一致");
-    if(newPwd.length < 3) return alert("密码长度不能小于3位");
+    if (!oldPwd || !newPwd || !confirmPwd) return alert("请完整填写");
+    if (newPwd !== confirmPwd) return alert("两次新密码不一致");
+    if (newPwd.length < 3) return alert("密码长度不能小于3位");
 
     try {
         const res = await fetch(`${API_BASE}/api/updateAdminPwd`, {
@@ -691,42 +689,36 @@ async function updateAdminPwd() {
         });
         const json = await res.json();
         alert(json.msg);
-        if(json.code === 0) logout();
+        if (json.code === 0) logout();
     } catch (e) {
         alert("请求失败");
     }
 }
 
+// 核心：适配后端 workData 结构 + 日期补零匹配
 function refreshTotalTable() {
-    // 获取选择的年月
     const qYear = document.getElementById('queryYear').value;
     const qMonth = document.getElementById('queryMonth').value;
-    // 拼接日期前缀 格式：2026-06
     const prefix = `${qYear}-${String(qMonth).padStart(2, '0')}`;
-    // 获取当月总天数
     const lastDay = new Date(qYear, qMonth, 0).getDate();
 
     const head = document.getElementById('totalTableHead');
     const body = document.getElementById('totalTableBody');
 
-    // 动态生成表头
     let headHtml = `<tr><th>人员</th>`;
     WORK_LIST.forEach(item => headHtml += `<th>${item}(小时)</th>`);
     headHtml += `<th>月度合计(小时)</th></tr>`;
     head.innerHTML = headHtml;
 
     let allRows = "";
-    // 遍历所有员工
     STAFF_LIST.forEach(staff => {
-        // 当前员工所有数据
-        const workData = allStaffWorkData[staff.id] || {};
+        const userWork = ALL_WORK_DATA[staff.id] || {};
         let monthTotalMin = 0;
-        const itemHourArr = WORK_LIST.map(()=>0);
+        const itemHourArr = WORK_LIST.map(() => 0);
 
-        // 遍历当月每一天
-        for(let d = 1; d <= lastDay; d++){
+        for (let d = 1; d <= lastDay; d++) {
             const dayStr = `${prefix}-${String(d).padStart(2, '0')}`;
-            const countArr = workData[dayStr] || [];
+            const countArr = userWork[dayStr] || [];
             countArr.forEach((count, idx) => {
                 const name = WORK_LIST[idx];
                 const onceMin = WORK_TIME_MAP[name] || 10;
@@ -736,14 +728,12 @@ function refreshTotalTable() {
             });
         }
 
-        // 拼接单元格
         let trHtml = `<td>${staff.name}</td>`;
         itemHourArr.forEach(h => trHtml += `<td>${h.toFixed(2)}</td>`);
         const totalHour = (monthTotalMin / 60).toFixed(2);
         trHtml += `<td class="total-hour">${totalHour}</td>`;
         allRows += `<tr>${trHtml}</tr>`;
     });
-
     body.innerHTML = allRows;
 }
 
@@ -764,29 +754,28 @@ async function loadLogList() {
             })
         });
         const json = await res.json();
-        if(json.code !== 0){
+        if (json.code !== 0) {
             logTable.innerHTML = `<tr><td colspan="5" style="text-align:center;">获取日志失败</td></tr>`;
             return;
         }
         const logList = json.data || [];
         logTable.innerHTML = "";
-        if(logList.length === 0){
+        if (logList.length === 0) {
             logTable.innerHTML = `<tr><td colspan="5" style="text-align:center;">暂无日志</td></tr>`;
             return;
         }
         let html = "";
         logList.forEach(log => {
             const fmtTime = formatChinaTime(log.time);
-            let workDetail = log.workDetail || "";
-            workDetail = workDetail.replace(/工时/g, "次");
-
+            let detail = log.workDetail || "";
+            detail = detail.replace(/工时/g, "次");
             html += `
             <tr>
                 <td>${fmtTime}</td>
                 <td>${log.operator}</td>
                 <td>${log.type}</td>
                 <td>${log.content}</td>
-                <td>${workDetail}</td>
+                <td>${detail}</td>
             </tr>`;
         });
         logTable.innerHTML = html;
@@ -796,7 +785,7 @@ async function loadLogList() {
 }
 
 async function clearAllLog() {
-    if(!confirm("确定清空全部日志？不可恢复！")) return;
+    if (!confirm("确定清空全部日志？不可恢复！")) return;
     try {
         const res = await fetch(`${API_BASE}/api/admin/clearLog`, {
             method: "POST",
@@ -811,7 +800,7 @@ async function clearAllLog() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', async function(){
+document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('btnStaffLogin').addEventListener('click', staffLogin);
     document.getElementById('btnAdminLogin').addEventListener('click', adminLogin);
 
