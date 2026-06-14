@@ -34,9 +34,11 @@
         .select-row{margin:20px 0;text-align:center;gap:10px;display:flex;justify-content:center;flex-wrap:wrap;}
         .select-row select{padding:8px;border:1px solid #ccc;border-radius:4px;min-width:100px;}
         /* 工作项编辑样式 */
-        .work-item-list{max-width:500px;margin:20px 0;}
+        .work-item-list{max-width:600px;margin:20px 0;}
         .work-item-row{display:flex;align-items:center;gap:8px;margin:8px 0;padding:8px;border:1px solid #eee;border-radius:4px;}
-        .work-item-row input{flex:1;padding:6px;border:1px solid #ccc;border-radius:4px;}
+        .work-item-row input{padding:6px;border:1px solid #ccc;border-radius:4px;}
+        .work-name{flex:2;}
+        .work-min{width:80px;}
     </style>
 </head>
 <body>
@@ -93,22 +95,23 @@
             <thead>
                 <tr>
                     <th>工作内容</th>
-                    <th>工时</th>
+                    <th>填写次数</th>
                 </tr>
             </thead>
             <tbody id="detailTable"></tbody>
         </table>
-        <button class="btn btn-success" type="button" onclick="saveStaffWork()">保存数据</button>
+        <button class="btn btn-success" onclick="saveStaffWork()">保存数据</button>
     </div>
 
-    <!-- 新增：工作内容编辑页面 -->
+    <!-- 工作内容+分钟配置编辑页 -->
     <div id="pageWorkEdit" class="hide">
-        <h2>工作内容编辑</h2>
+        <h2>工作项 & 单次耗时配置</h2>
         <button class="btn" onclick="backToAdmin()">返回管理员后台</button>
         <div class="split"></div>
-        <div style="max-width:500px;">
+        <div style="max-width:650px;">
+            <p style="margin:10px 0;color:#666;">说明：填写对应工作单次所需分钟，修改后全局生效</p>
             <button class="btn btn-success" onclick="addWorkItem()">新增工作项</button>
-            <button class="btn" onclick="saveWorkList()">保存修改</button>
+            <button class="btn" onclick="saveWorkList()">保存全部配置</button>
             <div id="workItemList" class="work-item-list"></div>
         </div>
     </div>
@@ -116,8 +119,7 @@
     <div id="pageAdmin" class="hide">
         <h2>管理员后台</h2>
         <button class="btn btn-danger" type="button" onclick="logout()">退出登录</button>
-        <!-- 新增：跳转工作项编辑按钮 -->
-        <button class="btn btn-success" onclick="goWorkEdit()">编辑工作内容</button>
+        <button class="btn btn-success" onclick="goWorkEdit()">编辑工作项&工时配置</button>
 
         <div class="split"></div>
         <h3>修改管理员密码</h3>
@@ -154,7 +156,7 @@
         </div>
 
         <div class="split"></div>
-        <h3>二、全员月度工时汇总</h3>
+        <h3>二、全员月度工时汇总（次数 / 折合小时）</h3>
         <div class="select-row" style="justify-content:flex-start;">
             <span>选择查询月份：</span>
             <select id="queryYear"></select>
@@ -198,19 +200,25 @@
 </div>
 
 <script>
-let WORK_LIST = []; // 改为动态全局变量
+let WORK_LIST = [];
+let MIN_CONFIG = {};
 let currStaffId = "";
 let currStaffName = "";
 let currentDateKey = "";
 
-// 初始化读取工作项列表
+// 初始化工作项+分钟配置
 async function initWorkList() {
     try {
         const res = await fetch("/api/getWorkList");
         const json = await res.json();
         WORK_LIST = json.list || [];
+        MIN_CONFIG = json.minCfg || {};
     } catch (e) {
         WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
+        MIN_CONFIG = {
+            "首件":20,"巡检":20,"入库":10,"出货":20,
+            "外箱标":10,"内箱标":10,"特标":10,"工单打印":10,"核对物料":10
+        };
     }
 }
 
@@ -287,13 +295,12 @@ async function goWorkEdit() {
     showPage("workEdit");
     await renderWorkEditList();
 }
-// 返回管理员页
 function backToAdmin() {
     showPage("admin");
     refreshTotalTable();
 }
 
-// 渲染工作项编辑列表
+// 渲染工作项+分钟配置列表
 async function renderWorkEditList() {
     await initWorkList();
     const wrap = document.getElementById("workItemList");
@@ -302,7 +309,10 @@ async function renderWorkEditList() {
         const div = document.createElement("div");
         div.className = "work-item-row";
         div.innerHTML = `
-            <input type="text" value="${item}" data-idx="${idx}">
+            <input class="work-name" type="text" value="${item}" data-idx="${idx}">
+            <span>单次</span>
+            <input class="work-min" type="number" min="1" value="${MIN_CONFIG[item] || 10}" data-idx="${idx}">
+            <span>分钟</span>
             <button class="btn btn-danger" onclick="delWorkItem(${idx})">删除</button>
         `;
         wrap.appendChild(div);
@@ -316,7 +326,10 @@ function addWorkItem() {
     div.className = "work-item-row";
     const newIdx = wrap.children.length;
     div.innerHTML = `
-        <input type="text" placeholder="请输入工作内容" data-idx="${newIdx}">
+        <input class="work-name" type="text" placeholder="工作内容" data-idx="${newIdx}">
+        <span>单次</span>
+        <input class="work-min" type="number" min="1" value="10" data-idx="${newIdx}">
+        <span>分钟</span>
         <button class="btn btn-danger" onclick="delWorkItem(${newIdx})">删除</button>
     `;
     wrap.appendChild(div);
@@ -329,29 +342,47 @@ function delWorkItem(idx) {
     rows[idx]?.remove();
 }
 
-// 保存工作项列表到后端
+// 保存工作项+分钟配置到云端
 async function saveWorkList() {
-    const rows = document.querySelectorAll(".work-item-row input");
+    const rows = document.querySelectorAll(".work-item-row");
     const newList = [];
-    rows.forEach(input => {
-        const val = input.value.trim();
-        if(val) newList.push(val);
+    const newMinCfg = {};
+
+    rows.forEach(row => {
+        const nameInput = row.querySelector(".work-name");
+        const minInput = row.querySelector(".work-min");
+        const name = nameInput.value.trim();
+        const minVal = parseInt(minInput.value) || 10;
+        if(!name) return;
+        newList.push(name);
+        newMinCfg[name] = minVal;
     });
+
     if(newList.length === 0) return alert("工作项不能为空");
 
-    const res = await fetch("/api/saveWorkList", {
+    // 先保存工作项列表
+    const res1 = await fetch("/api/saveWorkList", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({ list: newList })
     });
-    const json = await res.json();
-    if(json.code === 0) {
-        WORK_LIST = newList;
-        alert("保存成功，数据已同步");
-        backToAdmin();
-    } else {
-        alert(json.msg);
-    }
+    const json1 = await res1.json();
+    if(json1.code !== 0) return alert(json1.msg);
+
+    // 再保存分钟配置
+    const res2 = await fetch("/api/saveMinConfig", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ minCfg: newMinCfg })
+    });
+    const json2 = await res2.json();
+    if(json2.code !== 0) return alert(json2.msg);
+
+    // 刷新本地变量
+    WORK_LIST = newList;
+    MIN_CONFIG = newMinCfg;
+    alert("配置保存成功，已同步到云端");
+    backToAdmin();
 }
 
 function switchLogin(type) {
@@ -431,7 +462,7 @@ async function goDetail() {
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td>${name}</td>
-            <td><input type="number" step="0.1" id="work${idx}" value="${dayData[idx] || 0}"></td>
+            <td><input type="number" min="0" step="1" id="work${idx}" value="${dayData[idx] || 0}"></td>
         `;
         table.appendChild(tr);
     });
@@ -461,7 +492,18 @@ async function saveStaffWork() {
     alert("保存成功");
 }
 
-// 刷新汇总表头 + 表格
+// 计算总小时
+function calcHour(list, countArr, cfg) {
+    let totalMin = 0;
+    list.forEach((name, idx) => {
+        const cnt = Number(countArr[idx]) || 0;
+        const min = Number(cfg[name]) || 10;
+        totalMin += cnt * min;
+    });
+    return (totalMin / 60).toFixed(2);
+}
+
+// 刷新月度汇总（次数 + 折合工时）
 async function refreshTotalTable(){
     const qYear = document.getElementById("queryYear").value;
     const qMonth = document.getElementById("queryMonth").value;
@@ -472,26 +514,36 @@ async function refreshTotalTable(){
     const tableHead = document.getElementById("totalTableHead");
     const tableBody = document.getElementById("totalTable");
 
-    // 动态生成表头
+    // 表头：工作项(次数/小时)
     let headHtml = `<tr><th>人员</th>`;
-    WORK_LIST.forEach(item => headHtml += `<th>${item}</th>`);
-    headHtml += `</tr>`;
+    WORK_LIST.forEach(item => {
+        headHtml += `<th>${item}<br/>(次数/小时)</th>`;
+    });
+    headHtml += `<th>本月总计(小时)</th></tr>`;
     tableHead.innerHTML = headHtml;
 
     tableBody.innerHTML = "";
     allData.staffList.forEach(staff=>{
-        const workSum = WORK_LIST.map(()=>0);
+        const sumCount = WORK_LIST.map(()=>0);
         const staffData = allData.workData[staff.id] || {};
+        // 累加当月所有天数次数
         Object.entries(staffData).forEach(([dateKey, dayArr])=>{
             if(dateKey.startsWith(prefix)){
                 dayArr.forEach((val,idx)=>{
-                    if(workSum[idx] !== undefined) workSum[idx] += Number(val);
+                    if(sumCount[idx] !== undefined) sumCount[idx] += Number(val);
                 });
             }
         });
+        // 计算每项小时 + 总小时
+        const totalHour = calcHour(WORK_LIST, sumCount, MIN_CONFIG);
+
         const tr = document.createElement("tr");
         let html = `<td>${staff.name}</td>`;
-        workSum.forEach(item=> html += `<td>${item.toFixed(1)}</td>`);
+        sumCount.forEach((cnt, idx) => {
+            const h = ((cnt * (MIN_CONFIG[WORK_LIST[idx]]||10)) / 60).toFixed(2);
+            html += `<td>${cnt} / ${h}</td>`;
+        });
+        html += `<td>${totalHour}</td>`;
         tr.innerHTML = html;
         tableBody.appendChild(tr);
     });
