@@ -1,28 +1,21 @@
 const express = require('express');
 const { Redis } = require('@upstash/redis');
 const path = require('path');
-const serverless = require('serverless-http');
 const app = express();
 
-// Redis 初始化 + 容错（无环境变量不崩溃）
 let redis = null;
-let redisAvailable = false;
 try {
   redis = Redis.fromEnv();
-  redisAvailable = true;
-  console.log('Redis 连接成功');
 } catch (err) {
-  console.error('Redis 初始化失败，降级为内存模式:', err.message);
+  console.error('Redis 初始化失败:', err);
 }
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..')));
 
-// 所有存储KEY
 const DATA_KEY = "work_system_data";
 const LOG_KEY = "work_system_log";
 const WORK_LIST_KEY = "work_system_worklist";
-const TIME_CONFIG_KEY = "work_time_config";
 
 // 默认数据
 const DEFAULT_DATA = {
@@ -32,100 +25,56 @@ const DEFAULT_DATA = {
 };
 const DEFAULT_LOG = [];
 const DEFAULT_WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
-// 新增：默认工时配置
-const DEFAULT_TIME_CONFIG = {
-  "首件": 20,
-  "巡检": 20,
-  "入库": 10,
-  "出货": 10,
-  "外箱标": 10,
-  "内箱标": 10,
-  "特标": 10,
-  "工单打印": 10,
-  "核对物料": 10
-};
 
-// 内存兜底数据（Redis失效时使用）
-let memoryData = JSON.parse(JSON.stringify(DEFAULT_DATA));
-let memoryLog = [...DEFAULT_LOG];
-let memoryWorkList = [...DEFAULT_WORK_LIST];
-let memoryTimeConfig = JSON.parse(JSON.stringify(DEFAULT_TIME_CONFIG));
-
-// ========== 原有读写方法 兼容Redis/内存 ==========
+// 初始化数据
 async function initDefaultData() {
-  if (!redisAvailable) return DEFAULT_DATA;
+  if (!redis) return DEFAULT_DATA;
   await redis.set(DATA_KEY, DEFAULT_DATA);
   return DEFAULT_DATA;
 }
 async function initDefaultWorkList() {
-  if (!redisAvailable) return DEFAULT_WORK_LIST;
+  if (!redis) return DEFAULT_WORK_LIST;
   await redis.set(WORK_LIST_KEY, DEFAULT_WORK_LIST);
   return DEFAULT_WORK_LIST;
 }
 
 // 读写主数据
 async function readData() {
-  if (!redisAvailable) return memoryData;
+  if (!redis) return DEFAULT_DATA;
   let data = await redis.get(DATA_KEY);
-  const res = data || await initDefaultData();
-  memoryData = JSON.parse(JSON.stringify(res));
-  return res;
+  return data || await initDefaultData();
 }
 async function writeData(data) {
-  memoryData = JSON.parse(JSON.stringify(data));
-  if (!redisAvailable) return;
+  if (!redis) return;
   await redis.set(DATA_KEY, data);
 }
 
 // 读写工作项列表
 async function readWorkList() {
-  if (!redisAvailable) return memoryWorkList;
+  if (!redis) return DEFAULT_WORK_LIST;
   let list = await redis.get(WORK_LIST_KEY);
-  const res = list || await initDefaultWorkList();
-  memoryWorkList = [...res];
-  return res;
+  return list || await initDefaultWorkList();
 }
 async function writeWorkList(list) {
-  memoryWorkList = [...list];
-  if (!redisAvailable) return;
+  if (!redis) return;
   await redis.set(WORK_LIST_KEY, list);
 }
 
 // 日志读写
 async function readLog() {
-  if (!redisAvailable) return memoryLog;
+  if (!redis) return DEFAULT_LOG;
   let log = await redis.get(LOG_KEY);
-  const res = log || DEFAULT_LOG;
-  memoryLog = [...res];
-  return res;
+  return log || DEFAULT_LOG;
 }
 async function addLog(logItem) {
-  if (!redisAvailable) {
-    memoryLog.unshift(logItem);
-    return;
-  }
+  if (!redis) return;
   let logList = await readLog();
   logList.unshift(logItem);
   await redis.set(LOG_KEY, logList);
 }
 async function clearAllLog() {
-  memoryLog = [...DEFAULT_LOG];
-  if (!redisAvailable) return;
+  if (!redis) return;
   await redis.set(LOG_KEY, DEFAULT_LOG);
-}
-
-// ========== 新增：工时配置读写方法 ==========
-async function readTimeConfig() {
-  if (!redisAvailable) return memoryTimeConfig;
-  let config = await redis.get(TIME_CONFIG_KEY);
-  const res = config || DEFAULT_TIME_CONFIG;
-  memoryTimeConfig = JSON.parse(JSON.stringify(res));
-  return res;
-}
-async function writeTimeConfig(config) {
-  memoryTimeConfig = JSON.parse(JSON.stringify(config));
-  if (!redisAvailable) return;
-  await redis.set(TIME_CONFIG_KEY, config);
 }
 
 // 时间格式化：UTC 转为 YYYY-MM-DD HH:mm:ss
@@ -148,32 +97,11 @@ function alignWorkArray(oldArr, newLen) {
   return res;
 }
 
-// 首页
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
 
-// ========== 新增接口：工时配置 读取 & 保存 ==========
-app.get('/api/getTimeConfig', async (req, res) => {
-  try {
-    const config = await readTimeConfig();
-    res.json({ code: 0, data: config });
-  } catch {
-    res.json({ code: 0, data: DEFAULT_TIME_CONFIG });
-  }
-});
-
-app.post('/api/saveTimeConfig', async (req, res) => {
-  try {
-    const config = req.body;
-    await writeTimeConfig(config);
-    res.json({ code: 0, msg: "配置已全局生效" });
-  } catch {
-    res.json({ code: -1, msg: "保存失败" });
-  }
-});
-
-// ========== 原有全部接口（无改动，保留你原有逻辑） ==========
+// ========== 新增接口：读取/保存工作项列表 ==========
 app.get('/api/getWorkList', async (req, res) => {
   try {
     const list = await readWorkList();
@@ -189,6 +117,7 @@ app.post('/api/saveWorkList', async (req, res) => {
     if(!Array.isArray(list) || list.length === 0){
       return res.json({ code: 1, msg: "工作项列表不能为空" });
     }
+    // 读取原有数据，对齐所有员工历史工时数组长度
     const data = await readData();
     const newLen = list.length;
 
@@ -198,9 +127,11 @@ app.post('/api/saveWorkList', async (req, res) => {
       });
     });
 
+    // 保存新工作项 + 对齐后的数据
     await writeWorkList(list);
     await writeData(data);
 
+    // 记录日志
     const now = new Date();
     const timeStr = formatUTCDate(now);
     await addLog({
@@ -460,5 +391,4 @@ app.post('/api/admin/clearLog', async (req, res) => {
   }
 });
 
-// 适配 Vercel Serverless 导出（解决500崩溃核心）
-module.exports = serverless(app);
+module.exports = app;
