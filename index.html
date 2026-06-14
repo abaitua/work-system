@@ -468,7 +468,8 @@ async function adminLogin() {
         if(json.code === 0){
             adminUsername = user;
             adminPwd = pwd;
-            await renderAdminPage();
+            await renderAdminPage();   // 加载员工+缓存所有工时
+            refreshTotalTable();       // 👈 自动渲染当月汇总（关键这行）
             showPage('pageAdmin');
         }else{
             alert(json.msg || "登录失败");
