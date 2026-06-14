@@ -28,16 +28,17 @@
         input[type="number"]{width:100%;padding:5px;border:1px solid #ddd;border-radius:3px;}
         .hide{display:none;}
         .split{margin:12px 0;border-top:1px solid #eee;}
-        .select-row{margin:8px 0;gap:8px;display:flex;flex-wrap:wrap;align-items:center;}
+        .select-row{margin:8px 0;gap:8px;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;}
         .select-row select{padding:5px;border:1px solid #ccc;border-radius:3px;min-width:90px;}
-        .work-item-list{max-width:550px;margin:10px 0;}
-        .work-item-row{display:flex;align-items:center;gap:6px;margin:5px 0;padding:5px;border:1px solid #eee;border-radius:3px;}
+        .work-item-list{max-width:550px;margin:10px auto;}
+        .work-item-row{display:flex;align-items:center;gap:6px;margin:5px auto;padding:5px;border:1px solid #eee;border-radius:3px;}
         .work-item-row input{flex:1;padding:4px;border:1px solid #ccc;border-radius:3px;}
-        .time-config-row{display:flex;align-items:center;gap:8px;margin:4px 0;padding:4px;border:1px solid #eee;border-radius:3px;max-width:500px;}
+        .time-config-row{display:flex;align-items:center;gap:8px;margin:4px auto;padding:4px;border:1px solid #eee;border-radius:3px;max-width:500px;}
         .time-config-row input{width:70px;padding:4px;}
-        #staffManageList > div{margin:4px 0;padding:6px;border:1px solid #eee;border-radius:3px;}
+        #staffManageList > div{margin:4px auto;padding:6px;border:1px solid #eee;border-radius:3px;max-width:800px;}
         #staffManageList input{width:110px;padding:4px;margin:0 4px;}
         .total-hour{color:#e64340;font-weight:bold;}
+        div{text-align:center;}
     </style>
 </head>
 <body>
@@ -99,7 +100,6 @@
             </thead>
             <tbody id="detailTable"></tbody>
         </table>
-        <div style="margin:8px 0;">当日合计工时：<span id="dayTotalHour" class="total-hour">0.00</span> 小时</div>
         <button class="btn btn-success" type="button" onclick="saveStaffWork()">保存数据</button>
     </div>
 
@@ -107,7 +107,7 @@
         <h2>工作内容编辑</h2>
         <button class="btn" onclick="backToAdmin()">返回管理员后台</button>
         <div class="split"></div>
-        <div style="max-width:550px;">
+        <div style="max-width:550px;margin:0 auto;">
             <button class="btn btn-success" onclick="addWorkItem()">新增工作项</button>
             <button class="btn" onclick="saveWorkList()">保存修改</button>
             <div id="workItemList" class="work-item-list"></div>
@@ -131,7 +131,7 @@
 
         <div class="split"></div>
         <h3>修改管理员密码</h3>
-        <div class="login-item" style="max-width:400px;">
+        <div class="login-item" style="max-width:400px;margin:0 auto;">
             <label>原密码</label>
             <input type="password" id="oldAdminPwd">
             <label>新密码</label>
@@ -143,7 +143,7 @@
 
         <div class="split"></div>
         <h3>一、员工管理（新增/删除/修改密码）</h3>
-        <div class="login-item" style="max-width:400px;">
+        <div class="login-item" style="max-width:400px;margin:0 auto;">
             <label>新员工姓名</label>
             <input type="text" id="newStaffName">
             <label>登录密码</label>
@@ -154,7 +154,7 @@
 
         <div class="split"></div>
         <h3>数据清理</h3>
-        <div class="select-row" style="justify-content:flex-start;">
+        <div class="select-row">
             <select id="delStaffSel">
                 <option value="">全部员工</option>
             </select>
@@ -165,10 +165,11 @@
 
         <div class="split"></div>
         <h3>二、全员月度工时汇总（已换算为小时）</h3>
-        <div class="select-row" style="justify-content:flex-start;">
+        <div class="select-row">
             <span>查询月份：</span>
             <select id="queryYear"></select>
             <select id="queryMonth"></select>
+            <button class="btn" onclick="refreshTotalTable()">查询</button>
         </div>
         <table>
             <thead id="totalTableHead">
@@ -181,7 +182,7 @@
 
         <div class="split"></div>
         <h3>三、系统操作日志（UTC+8 北京时间）</h3>
-        <div class="select-row" style="justify-content:flex-start;margin:6px 0;">
+        <div class="select-row" style="margin:6px 0;">
             <select id="logStaffSel">
                 <option value="">全部员工</option>
             </select>
@@ -401,7 +402,7 @@ async function goDetail() {
     showPage('pageStaffDetail');
 }
 
-// 实时计算当日总工时（后台逻辑保留，仅前端隐藏字段）
+// 实时计算当日总工时（后台逻辑保留，前端不展示）
 function calcDayTotal(){
     let totalMin = 0;
     WORK_LIST.forEach((name, idx) => {
@@ -410,8 +411,6 @@ function calcDayTotal(){
         const itemMin = count * onceMin;
         totalMin += itemMin;
     });
-    const totalHour = (totalMin / 60).toFixed(2);
-    document.getElementById("dayTotalHour").innerText = totalHour;
 }
 
 function backToDate() {
@@ -479,7 +478,7 @@ async function adminLogin() {
     }
 }
 
-// 渲染管理员主页 + 员工列表 + 自动加载工时统计
+// 渲染管理员主页 + 员工列表
 async function renderAdminPage() {
     try {
         const res = await fetch(`${API_BASE}/api/getAllData`);
@@ -509,8 +508,8 @@ async function renderAdminPage() {
         staffBox.appendChild(div);
     });
 
-    // 进入页面自动加载工时汇总
-    await refreshTotalTable();
+    // 清空表格，等待手动查询
+    document.getElementById('totalTableBody').innerHTML = "";
 }
 
 // ===================== 工作项编辑 =====================
@@ -520,7 +519,6 @@ function goWorkEdit() {
 }
 function backToAdmin() {
     showPage('pageAdmin');
-    refreshTotalTable();
 }
 function renderWorkItemList() {
     const wrap = document.getElementById('workItemList');
@@ -723,7 +721,7 @@ async function updateAdminPwd() {
     }
 }
 
-// ===================== 月度工时汇总 =====================
+// ===================== 月度工时汇总（一次性渲染） =====================
 async function refreshTotalTable() {
     const qYear = document.getElementById('queryYear').value;
     const qMonth = document.getElementById('queryMonth').value;
@@ -736,17 +734,17 @@ async function refreshTotalTable() {
     WORK_LIST.forEach(item => headHtml += `<th>${item}(小时)</th>`);
     headHtml += `<th>月度合计(小时)</th></tr>`;
     head.innerHTML = headHtml;
-    body.innerHTML = "";
+
+    // 统一收集所有行HTML，一次性插入
+    let allRows = "";
+    const lastDay = new Date(qYear, qMonth, 0).getDate();
 
     for(let staff of STAFF_LIST){
         let monthTotalMin = 0;
         const itemHourArr = WORK_LIST.map(()=>0);
-        const lastDay = new Date(qYear, qMonth, 0).getDate();
-
         try {
             const res = await fetch(`${API_BASE}/api/getStaffWork/${staff.id}`);
             const workData = await res.json();
-
             for(let d = 1; d <= lastDay; d++){
                 const dayStr = `${prefix}-${String(d).padStart(2, '0')}`;
                 const countArr = workData[dayStr] || [];
@@ -760,14 +758,14 @@ async function refreshTotalTable() {
             }
         } catch (e) {}
 
-        const tr = document.createElement('tr');
         let trHtml = `<td>${staff.name}</td>`;
         itemHourArr.forEach(h => trHtml += `<td>${h.toFixed(2)}</td>`);
         const totalHour = (monthTotalMin / 60).toFixed(2);
         trHtml += `<td class="total-hour">${totalHour}</td>`;
-        tr.innerHTML = trHtml;
-        body.appendChild(tr);
+        allRows += `<tr>${trHtml}</tr>`;
     }
+    // 一次性渲染全部数据
+    body.innerHTML = allRows;
 }
 
 // ===================== 日志功能 =====================
