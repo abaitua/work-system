@@ -5,38 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>工作量统计系统</title>
     <style>
-        *{margin:0;padding:0;box-sizing:border-box;font-family:"Microsoft Yahei",sans-serif;}
-        body{background:#f5f7fa;padding:20px;}
-        .container{max-width:1200px;margin:0 auto;background:#fff;padding:25px;border-radius:8px;box-shadow:0 2px 10px #ddd;}
-        h2{text-align:center;margin-bottom:25px;color:#333;}
-        h3{margin:15px 0;color:#444;}
-        .btn{padding:8px 16px;background:#409eff;color:#fff;border:none;border-radius:4px;cursor:pointer;margin:5px;}
+        *{margin:0;padding:0;box-sizing:border-box;font-family:"Microsoft Yahei",sans-serif;font-size:14px;}
+        body{background:#f5f7fa;padding:10px;}
+        .container{max-width:1200px;margin:0 auto;background:#fff;padding:15px;border-radius:6px;box-shadow:0 1px 6px #ddd;}
+        h2{text-align:center;margin-bottom:12px;color:#333;font-size:18px;}
+        h3{margin:10px 0 6px 0;color:#444;font-size:15px;}
+        h4{font-size:14px;margin:6px 0;}
+        .btn{padding:5px 10px;background:#409eff;color:#fff;border:none;border-radius:3px;cursor:pointer;margin:2px 4px;}
         .btn:hover{background:#66b1ff;}
         .btn-danger{background:#f56c6c;}
         .btn-danger:hover{background:#f78989;}
         .btn-success{background:#67c23a;}
         .btn-success:hover{background:#85ce61;}
-        .login-box{max-width:400px;margin:50px auto;border:1px solid #eee;padding:30px;border-radius:8px;}
-        .login-item{margin:15px 0;}
-        .login-item label{display:block;margin-bottom:5px;}
-        .login-item input{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;}
-        .tab{margin:20px 0;text-align:center;}
-        .tab button{margin:0 10px;}
-        .date-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin:20px 0;}
-        .date-item{border:1px solid #eee;padding:12px;border-radius:6px;text-align:center;cursor:pointer;}
+        .login-box{max-width:400px;margin:30px auto;border:1px solid #eee;padding:20px;border-radius:6px;}
+        .login-item{margin:10px 0;}
+        .login-item label{display:block;margin-bottom:3px;}
+        .login-item input{width:100%;padding:5px;border:1px solid #ccc;border-radius:3px;}
+        .tab{margin:12px 0;text-align:center;}
+        .tab button{margin:0 8px;}
+        .date-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin:12px 0;}
+        .date-item{border:1px solid #eee;padding:8px;border-radius:4px;text-align:center;cursor:pointer;}
         .date-item:hover{background:#f0f7ff;}
-        table{width:100%;border-collapse:collapse;margin:20px 0;}
-        th,td{border:1px solid #ccc;padding:10px;text-align:center;}
+        table{width:100%;border-collapse:collapse;margin:10px 0;}
+        th,td{border:1px solid #ccc;padding:6px;text-align:center;}
         th{background:#f8f9fa;}
-        input[type="number"]{width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;}
+        input[type="number"]{width:100%;padding:5px;border:1px solid #ddd;border-radius:3px;}
         .hide{display:none;}
-        .split{margin:30px 0;border-top:1px solid #eee;}
-        .select-row{margin:20px 0;text-align:center;gap:10px;display:flex;justify-content:center;flex-wrap:wrap;}
-        .select-row select{padding:8px;border:1px solid #ccc;border-radius:4px;min-width:100px;}
+        .split{margin:15px 0;border-top:1px solid #eee;}
+        .select-row{margin:10px 0;text-align:center;gap:8px;display:flex;justify-content:center;flex-wrap:wrap;}
+        .select-row select{padding:5px;border:1px solid #ccc;border-radius:3px;min-width:90px;}
         /* 工作项编辑样式 */
-        .work-item-list{max-width:500px;margin:20px 0;}
-        .work-item-row{display:flex;align-items:center;gap:8px;margin:8px 0;padding:8px;border:1px solid #eee;border-radius:4px;}
-        .work-item-row input{flex:1;padding:6px;border:1px solid #ccc;border-radius:4px;}
+        .work-item-list{max-width:500px;margin:12px 0;}
+        .work-item-row{display:flex;align-items:center;gap:6px;margin:6px 0;padding:6px;border:1px solid #eee;border-radius:3px;}
+        .work-item-row input{flex:1;padding:5px;border:1px solid #ccc;border-radius:3px;}
+        /* 管理员列表项紧凑样式 */
+        #staffManageList > div{margin:4px 0;padding:6px;border:1px solid #eee;border-radius:3px;}
+        #staffManageList input{width:110px;padding:4px;margin:0 4px;}
     </style>
 </head>
 <body>
@@ -116,7 +120,6 @@
     <div id="pageAdmin" class="hide">
         <h2>管理员后台</h2>
         <button class="btn btn-danger" type="button" onclick="logout()">退出登录</button>
-        <!-- 新增：跳转工作项编辑按钮 -->
         <button class="btn btn-success" onclick="goWorkEdit()">编辑工作内容</button>
 
         <div class="split"></div>
@@ -128,22 +131,22 @@
             <input type="password" id="newAdminPwd">
             <label>确认新密码</label>
             <input type="password" id="confirmAdminPwd">
-            <button class="btn btn-success" type="button" onclick="updateAdminPwd()" style="margin-top:10px;">保存修改</button>
+            <button class="btn btn-success" type="button" onclick="updateAdminPwd()" style="margin-top:6px;">保存修改</button>
         </div>
 
         <div class="split"></div>
-        <h3>一、员工管理（新增/删除/查看密码）</h3>
+        <h3>一、员工管理（新增/删除/修改密码）</h3>
         <div class="login-item" style="max-width:400px;">
             <label>新员工姓名</label>
             <input type="text" id="newStaffName">
             <label>登录密码</label>
             <input type="password" id="newStaffPwd">
-            <button class="btn btn-success" type="button" onclick="addStaff()" style="margin-top:10px;">新增员工</button>
+            <button class="btn btn-success" type="button" onclick="addStaff()" style="margin-top:6px;">新增员工</button>
         </div>
         <div id="staffManageList"></div>
 
         <div class="split"></div>
-        <h3>数据清理（释放存储空间）</h3>
+        <h3>数据清理</h3>
         <div class="select-row" style="justify-content:flex-start;">
             <select id="delStaffSel">
                 <option value="">全部员工</option>
@@ -156,7 +159,7 @@
         <div class="split"></div>
         <h3>二、全员月度工时汇总</h3>
         <div class="select-row" style="justify-content:flex-start;">
-            <span>选择查询月份：</span>
+            <span>查询月份：</span>
             <select id="queryYear"></select>
             <select id="queryMonth"></select>
             <button class="btn" onclick="refreshTotalTable()">查询</button>
@@ -171,8 +174,8 @@
         </table>
 
         <div class="split"></div>
-        <h3>三、系统操作日志（仅管理员查看）</h3>
-        <div class="select-row" style="justify-content:flex-start;margin:10px 0;">
+        <h3>三、系统操作日志（UTC+8 北京时间）</h3>
+        <div class="select-row" style="justify-content:flex-start;margin:6px 0;">
             <select id="logStaffSel">
                 <option value="">全部员工</option>
             </select>
@@ -180,11 +183,11 @@
             <button class="btn" onclick="loadLogList()">查询日志</button>
             <button class="btn btn-danger" onclick="clearAllLog()">清空全部日志</button>
         </div>
-        <div style="margin:10px 0;">
+        <div>
             <table>
                 <thead>
                     <tr>
-                        <th>操作时间(UTC)</th>
+                        <th>操作时间(北京时间)</th>
                         <th>操作人</th>
                         <th>操作类型</th>
                         <th>操作详情</th>
@@ -202,6 +205,19 @@ let WORK_LIST = []; // 改为动态全局变量
 let currStaffId = "";
 let currStaffName = "";
 let currentDateKey = "";
+
+// 【核心修改】转为 UTC+8 北京时间格式化
+function formatChinaTime(date) {
+    const offset = 8 * 60; // 东八区 8小时
+    const localDate = new Date(date.getTime() + offset * 60000);
+    const year = localDate.getFullYear();
+    const month = String(localDate.getMonth() + 1).padStart(2, '0');
+    const day = String(localDate.getDate()).padStart(2, '0');
+    const h = String(localDate.getHours()).padStart(2, '0');
+    const m = String(localDate.getMinutes()).padStart(2, '0');
+    const s = String(localDate.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${h}:${m}:${s}`;
+}
 
 // 初始化读取工作项列表
 async function initWorkList() {
@@ -511,9 +527,8 @@ async function renderAdminPage() {
         delStaffSel.innerHTML += `<option value="${staff.id}">${staff.name}</option>`;
         logStaffSel.innerHTML += `<option value="${staff.id}">${staff.name}</option>`;
         const div = document.createElement("div");
-        div.style="margin:8px 0;padding:8px;border:1px solid #eee;";
         div.innerHTML = `姓名：${staff.name} &nbsp;&nbsp; 密码：${staff.pwd}
-        <input type="password" id="editPwd_${staff.id}" placeholder="新密码" style="width:120px;padding:4px;margin:0 5px;">
+        <input type="password" id="editPwd_${staff.id}" placeholder="新密码">
         <button class="btn" onclick="updateStaffPwd('${staff.id}')">修改密码</button>
         <button class="btn btn-danger" onclick="delStaff('${staff.id}')">删除</button>`;
         staffBox.appendChild(div);
@@ -656,8 +671,10 @@ async function loadLogList() {
 
     logList.forEach(log => {
         const tr = document.createElement("tr");
+        // 前端统一渲染为北京时间
+        const chinaTime = formatChinaTime(new Date(log.time));
         tr.innerHTML = `
-            <td>${log.time}</td>
+            <td>${chinaTime}</td>
             <td>${log.operator}</td>
             <td>${log.type}</td>
             <td>${log.content}</td>
