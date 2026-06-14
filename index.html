@@ -770,8 +770,22 @@ async function updateAdminPwd() {
     }
 }
 
-// 核心：适配后端 workData 结构 + 日期补零匹配
-function refreshTotalTable() {
+// 从后端拉取最新全量数据
+async function fetchAllWorkData() {
+    try {
+        const res = await fetch(`${API_BASE}/api/getAllData`);
+        const json = await res.json();
+        STAFF_LIST = json.staffList || [];
+        ALL_WORK_DATA = json.workData || {};
+    } catch (e) {
+        console.error("拉取数据失败", e);
+    }
+}
+
+// 汇总表格渲染（点击查询刷新数据）
+async function refreshTotalTable() {
+    await fetchAllWorkData();
+
     const qYear = document.getElementById('queryYear').value;
     const qMonth = document.getElementById('queryMonth').value;
     const prefix = `${qYear}-${String(qMonth).padStart(2, '0')}`;
