@@ -38,7 +38,6 @@
         #staffManageList > div{margin:4px auto;padding:6px;border:1px solid #eee;border-radius:3px;max-width:800px;}
         #staffManageList input{width:110px;padding:4px;margin:0 4px;}
         .total-hour{color:#e64340;font-weight:bold;}
-        div{text-align:center;}
     </style>
 </head>
 <body>
@@ -59,7 +58,7 @@
                 <input type="password" id="staffPwd">
             </div>
             <div style="text-align:center;">
-                <button class="btn btn-success" type="button" id="btnStaffLogin">登录</button>
+                <button class="btn btn-success" type="button" onclick="staffLogin()">登录</button>
             </div>
         </div>
         <div class="login-box hide" id="adminLogin">
@@ -72,7 +71,7 @@
                 <input type="password" id="adminPwd">
             </div>
             <div style="text-align:center;">
-                <button class="btn btn-success" type="button" id="btnAdminLogin">登录</button>
+                <button class="btn btn-success" type="button" onclick="adminLogin()">登录</button>
             </div>
         </div>
     </div>
@@ -85,6 +84,7 @@
             <select id="selMonth"></select>
             <select id="selDay"></select>
             <button class="btn btn-success" onclick="goDetail()">进入填写</button>
+            <button class="btn" onclick="refreshWorkList()">刷新工作项</button>
         </div>
     </div>
 
@@ -100,7 +100,7 @@
             </thead>
             <tbody id="detailTable"></tbody>
         </table>
-        <button class="btn btn-success" type="button" onclick="saveStaffWork()">保存数据</button>
+        <button class="btn btn-success" onclick="saveStaffWork()">保存数据</button>
     </div>
 
     <div id="pageWorkEdit" class="hide">
@@ -218,26 +218,37 @@ let adminUsername = "";
 let adminPwd = "";
 let ALL_WORK_DATA = {};
 
+// 全局：强制从云端拉取最新工作项
+async function loadBaseData() {
+  try {
+    const res = await fetch(`${API_BASE}/api/getWorkList`);
+    const json = await res.json();
+    if (json.code === 0) {
+      WORK_LIST = json.list || [];
+    }
+  } catch (e) {
+    WORK_LIST = [];
+  }
+}
+
+// 全局：强制从云端拉取最新工时配置
 async function initTimeConfig() {
   try {
     const res = await fetch(`${API_BASE}/api/getTimeConfig`);
     const json = await res.json();
     WORK_TIME_MAP = json.data || {};
   } catch (e) {
-    WORK_TIME_MAP = {
-      "首件": 20,
-      "巡检": 20,
-      "入库": 10,
-      "出货": 10,
-      "外箱标": 10,
-      "内箱标": 10,
-      "特标": 10,
-      "工单打印": 10,
-      "核对物料": 10
-    };
+    WORK_TIME_MAP = {};
   }
 }
 
+// 手动刷新工作项
+async function refreshWorkList() {
+  await loadBaseData();
+  alert("已同步云端最新工作项");
+}
+
+// 时间格式化
 function formatChinaTime(timeStr) {
   const date = new Date(timeStr);
   const local = new Date(date.getTime() + 8 * 60 * 60 * 1000);
@@ -250,11 +261,13 @@ function formatChinaTime(timeStr) {
   return `${y}-${m}-${d} ${h}:${mi}:${s}`;
 }
 
+// 切换页面
 function showPage(pageId) {
   document.querySelectorAll('.container > div').forEach(el => el.classList.add('hide'));
   document.getElementById(pageId).classList.remove('hide');
 }
 
+// 切换登录面板
 function switchLogin(type) {
   document.getElementById('staffLogin').classList.add('hide');
   document.getElementById('adminLogin').classList.add('hide');
@@ -265,15 +278,20 @@ function switchLogin(type) {
   }
 }
 
+// 退出登录：清空本地缓存
 function logout() {
   currStaffId = "";
   currStaffName = "";
   adminUsername = "";
   adminPwd = "";
+  STAFF_LIST = [];
+  WORK_LIST = [];
+  WORK_TIME_MAP = {};
   ALL_WORK_DATA = {};
   showPage('pageLogin');
 }
 
+// 初始化日期下拉框
 function initDateSelect() {
   const now = new Date();
   const currYear = now.getFullYear();
@@ -327,22 +345,15 @@ function initDateSelect() {
   monthSel.onchange = () => fillDay(+yearSel.value, +monthSel.value);
 }
 
-async function loadBaseData() {
-  try {
-    const res = await fetch(`${API_BASE}/api/getWorkList`);
-    const json = await res.json();
-    if (json.code === 0) {
-      WORK_LIST = json.list || [];
-    }
-  } catch (e) {
-    WORK_LIST = ["首件", "巡检", "入库", "出货", "外箱标", "内箱标", "特标", "工单打印", "核对物料"];
-  }
-}
-
+// 员工登录：登录前先同步云端数据
 async function staffLogin() {
   const name = document.getElementById('staffName').value.trim();
   const pwd = document.getElementById('staffPwd').value.trim();
   if (!name || !pwd) return alert("请输入姓名和密码");
+
+  // 登录强制拉取最新工作项+工时
+  await loadBaseData();
+  await initTimeConfig();
 
   try {
     const res = await fetch(`${API_BASE}/api/staff/login`, {
@@ -364,6 +375,7 @@ async function staffLogin() {
   }
 }
 
+// 进入填写页：再次同步云端数据
 async function goDetail() {
   const y = document.getElementById('selYear').value;
   const m = String(document.getElementById('selMonth').value).padStart(2, '0');
@@ -372,6 +384,9 @@ async function goDetail() {
 
   document.getElementById('detailStaffName').innerText = currStaffName;
   document.getElementById('selectDateText').innerText = `${y}年${m}月${d}日`;
+
+  // 进入填写页强制刷新云端工作项
+  await loadBaseData();
 
   let workArr = [];
   try {
@@ -398,6 +413,7 @@ function backToDate() {
   showPage('pageStaffDate');
 }
 
+// 保存员工填写数据
 async function saveStaffWork() {
   const workArr = [];
   WORK_LIST.forEach((_, idx) => {
@@ -426,10 +442,15 @@ async function saveStaffWork() {
   }
 }
 
+// 管理员登录：登录前同步云端数据
 async function adminLogin() {
   const user = document.getElementById('adminUser').value.trim();
   const pwd = document.getElementById('adminPwd').value.trim();
   if (!user || !pwd) return alert("请输入账号密码");
+
+  // 管理员登录拉取最新配置
+  await loadBaseData();
+  await initTimeConfig();
 
   try {
     const res = await fetch(`${API_BASE}/api/admin/login`, {
@@ -452,6 +473,7 @@ async function adminLogin() {
   }
 }
 
+// 渲染管理员页面
 async function renderAdminPage() {
   try {
     const res = await fetch(`${API_BASE}/api/getAllData`);
@@ -484,15 +506,16 @@ async function renderAdminPage() {
   });
 }
 
+// 打开工作项编辑
 function goWorkEdit() {
   showPage('pageWorkEdit');
   const wrap = document.getElementById('workItemList');
   wrap.innerHTML = "";
-  WORK_LIST.forEach((item, idx) => {
+  WORK_LIST.forEach((item) => {
     const div = document.createElement('div');
     div.className = "work-item-row";
     div.innerHTML = `
-      <input type="text" value="${item}" data-idx="${idx}">
+      <input type="text" value="${item}">
       <button class="btn btn-danger" onclick="delWorkItem(this)">删除</button>
     `;
     wrap.appendChild(div);
@@ -514,6 +537,8 @@ function addWorkItem() {
 function delWorkItem(btn) {
   btn.parentElement.remove();
 }
+
+// 保存工作项列表
 async function saveWorkItemList() {
   const inputs = document.querySelectorAll(".work-item-row input");
   const newList = [];
@@ -531,10 +556,8 @@ async function saveWorkItemList() {
     });
     const json = await res.json();
     if (json.code === 0) {
+      // 保存后本地同步最新数据
       WORK_LIST = newList;
-      WORK_LIST.forEach(name => {
-        if (!WORK_TIME_MAP[name]) WORK_TIME_MAP[name] = 10;
-      });
       alert("保存成功");
       backAdmin();
     } else {
@@ -545,6 +568,7 @@ async function saveWorkItemList() {
   }
 }
 
+// 打开工时配置
 async function goTimeConfig() {
   showPage('pageTimeConfig');
   await initTimeConfig();
@@ -563,6 +587,7 @@ async function goTimeConfig() {
   });
 }
 
+// 保存工时配置
 async function saveTimeConfig() {
   const inputs = document.querySelectorAll(".time-config-row input");
   const newConfig = {};
@@ -571,7 +596,6 @@ async function saveTimeConfig() {
     const val = Number(inp.value) || 0;
     newConfig[name] = val;
   });
-  WORK_TIME_MAP = newConfig;
 
   try {
     const res = await fetch(`${API_BASE}/api/saveTimeConfig`, {
@@ -580,7 +604,12 @@ async function saveTimeConfig() {
       body: JSON.stringify(newConfig)
     });
     const json = await res.json();
-    alert(json.msg);
+    if(json.code === 0){
+      WORK_TIME_MAP = newConfig;
+      alert("工时配置保存成功");
+    }else{
+      alert(json.msg);
+    }
     backAdmin();
   } catch (e) {
     alert("保存失败");
@@ -588,6 +617,7 @@ async function saveTimeConfig() {
   }
 }
 
+// 新增员工
 async function addStaff() {
   const name = document.getElementById('newStaffName').value.trim();
   const pwd = document.getElementById('newStaffPwd').value.trim();
@@ -612,6 +642,7 @@ async function addStaff() {
   }
 }
 
+// 删除员工
 async function delStaff(id) {
   if (!confirm("确定删除该员工及所有数据？")) return;
   try {
@@ -627,6 +658,7 @@ async function delStaff(id) {
   }
 }
 
+// 修改员工密码
 async function updateStaffPwd(staffId) {
   const newPwd = document.getElementById(`editPwd_${staffId}`).value.trim();
   if (!newPwd) return alert("请输入新密码");
@@ -651,6 +683,7 @@ async function updateStaffPwd(staffId) {
   }
 }
 
+// 批量删除月度数据
 async function delMonthData() {
   const staffId = document.getElementById('delStaffSel').value;
   const y = document.getElementById('delYearSel').value;
@@ -680,6 +713,7 @@ async function delMonthData() {
   }
 }
 
+// 修改管理员密码
 async function updateAdminPwd() {
   const oldPwd = document.getElementById('oldAdminPwd').value.trim();
   const newPwd = document.getElementById('newAdminPwd').value.trim();
@@ -702,6 +736,7 @@ async function updateAdminPwd() {
   }
 }
 
+// 刷新工时汇总表格
 async function refreshTotalTable() {
   try {
     const res = await fetch(`${API_BASE}/api/getAllData`);
@@ -754,6 +789,7 @@ async function refreshTotalTable() {
   body.innerHTML = bodyHtml;
 }
 
+// 查询日志
 async function loadLogList() {
   const staffId = document.getElementById('logStaffSel').value;
   const date = document.getElementById('logDateFilter').value;
@@ -796,32 +832,28 @@ async function loadLogList() {
   }
 }
 
+// 清空日志
 async function clearLog() {
-  if (!confirm("确定清空所有日志？不可恢复！")) return;
+  if(!confirm("确定清空所有日志？")) return;
   try {
     const res = await fetch(`${API_BASE}/api/admin/clearLog`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: adminUsername, pwd: adminPwd })
+      body: JSON.stringify({
+        username: adminUsername,
+        pwd: adminPwd
+      })
     });
     const json = await res.json();
     alert(json.msg);
-    if (json.code === 0) loadLogList();
+    loadLogList();
   } catch (e) {
     alert("操作失败");
   }
 }
 
-document.addEventListener('DOMContentLoaded', async function () {
-  document.getElementById('btnStaffLogin').addEventListener('click', staffLogin);
-  document.getElementById('btnAdminLogin').addEventListener('click', adminLogin);
-
+// 页面初始化
+window.onload = function(){
   initDateSelect();
-  await loadBaseData();
-  await initTimeConfig();
-  showPage('pageLogin');
-  switchLogin('staff');
-});
+}
 </script>
-</body>
-</html>
