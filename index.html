@@ -9,6 +9,7 @@
         body{background:#f5f7fa;padding:20px;}
         .container{max-width:1200px;margin:0 auto;background:#fff;padding:25px;border-radius:8px;box-shadow:0 2px 10px #ddd;}
         h2{text-align:center;margin-bottom:25px;color:#333;}
+        h3{margin:15px 0;color:#444;}
         .btn{padding:8px 16px;background:#409eff;color:#fff;border:none;border-radius:4px;cursor:pointer;margin:5px;}
         .btn:hover{background:#66b1ff;}
         .btn-danger{background:#f56c6c;}
@@ -32,6 +33,10 @@
         .split{margin:30px 0;border-top:1px solid #eee;}
         .select-row{margin:20px 0;text-align:center;gap:10px;display:flex;justify-content:center;flex-wrap:wrap;}
         .select-row select{padding:8px;border:1px solid #ccc;border-radius:4px;min-width:100px;}
+        /* 工作项编辑样式 */
+        .work-item-list{max-width:500px;margin:20px 0;}
+        .work-item-row{display:flex;align-items:center;gap:8px;margin:8px 0;padding:8px;border:1px solid #eee;border-radius:4px;}
+        .work-item-row input{flex:1;padding:6px;border:1px solid #ccc;border-radius:4px;}
     </style>
 </head>
 <body>
@@ -96,9 +101,23 @@
         <button class="btn btn-success" type="button" onclick="saveStaffWork()">保存数据</button>
     </div>
 
+    <!-- 新增：工作内容编辑页面 -->
+    <div id="pageWorkEdit" class="hide">
+        <h2>工作内容编辑</h2>
+        <button class="btn" onclick="backToAdmin()">返回管理员后台</button>
+        <div class="split"></div>
+        <div style="max-width:500px;">
+            <button class="btn btn-success" onclick="addWorkItem()">新增工作项</button>
+            <button class="btn" onclick="saveWorkList()">保存修改</button>
+            <div id="workItemList" class="work-item-list"></div>
+        </div>
+    </div>
+
     <div id="pageAdmin" class="hide">
         <h2>管理员后台</h2>
         <button class="btn btn-danger" type="button" onclick="logout()">退出登录</button>
+        <!-- 新增：跳转工作项编辑按钮 -->
+        <button class="btn btn-success" onclick="goWorkEdit()">编辑工作内容</button>
 
         <div class="split"></div>
         <h3>修改管理员密码</h3>
@@ -143,18 +162,9 @@
             <button class="btn" onclick="refreshTotalTable()">查询</button>
         </div>
         <table>
-            <thead>
+            <thead id="totalTableHead">
                 <tr>
                     <th>人员</th>
-                    <th>首件</th>
-                    <th>巡检</th>
-                    <th>入库</th>
-                    <th>出货</th>
-                    <th>外箱标</th>
-                    <th>内箱标</th>
-                    <th>特标</th>
-                    <th>工单打印</th>
-                    <th>核对物料</th>
                 </tr>
             </thead>
             <tbody id="totalTable"></tbody>
@@ -188,10 +198,21 @@
 </div>
 
 <script>
-const WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
+let WORK_LIST = []; // 改为动态全局变量
 let currStaffId = "";
 let currStaffName = "";
 let currentDateKey = "";
+
+// 初始化读取工作项列表
+async function initWorkList() {
+    try {
+        const res = await fetch("/api/getWorkList");
+        const json = await res.json();
+        WORK_LIST = json.list || [];
+    } catch (e) {
+        WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
+    }
+}
 
 function initDateSelect() {
     const now = new Date();
@@ -247,28 +268,97 @@ function getFormatDate() {
     return `${y}-${m}-${d}`;
 }
 
-document.addEventListener('DOMContentLoaded', function(){
-    document.getElementById('staffLoginBtn').addEventListener('click', staffLogin);
-    document.getElementById('adminLoginBtn').addEventListener('click', adminLogin);
-    initDateSelect();
-});
+// 页面切换
+function showPage(page) {
+    document.getElementById("pageLogin").classList.add("hide");
+    document.getElementById("pageStaffDate").classList.add("hide");
+    document.getElementById("pageStaffDetail").classList.add("hide");
+    document.getElementById("pageAdmin").classList.add("hide");
+    document.getElementById("pageWorkEdit").classList.add("hide");
+    if(page === "login") document.getElementById("pageLogin").classList.remove("hide");
+    if(page === "staffDate") document.getElementById("pageStaffDate").classList.remove("hide");
+    if(page === "staffDetail") document.getElementById("pageStaffDetail").classList.remove("hide");
+    if(page === "admin") document.getElementById("pageAdmin").classList.remove("hide");
+    if(page === "workEdit") document.getElementById("pageWorkEdit").classList.remove("hide");
+}
+
+// 跳转工作项编辑页
+async function goWorkEdit() {
+    showPage("workEdit");
+    await renderWorkEditList();
+}
+// 返回管理员页
+function backToAdmin() {
+    showPage("admin");
+    refreshTotalTable();
+}
+
+// 渲染工作项编辑列表
+async function renderWorkEditList() {
+    await initWorkList();
+    const wrap = document.getElementById("workItemList");
+    wrap.innerHTML = "";
+    WORK_LIST.forEach((item, idx) => {
+        const div = document.createElement("div");
+        div.className = "work-item-row";
+        div.innerHTML = `
+            <input type="text" value="${item}" data-idx="${idx}">
+            <button class="btn btn-danger" onclick="delWorkItem(${idx})">删除</button>
+        `;
+        wrap.appendChild(div);
+    });
+}
+
+// 新增工作项
+function addWorkItem() {
+    const wrap = document.getElementById("workItemList");
+    const div = document.createElement("div");
+    div.className = "work-item-row";
+    const newIdx = wrap.children.length;
+    div.innerHTML = `
+        <input type="text" placeholder="请输入工作内容" data-idx="${newIdx}">
+        <button class="btn btn-danger" onclick="delWorkItem(${newIdx})">删除</button>
+    `;
+    wrap.appendChild(div);
+}
+
+// 删除单条工作项
+function delWorkItem(idx) {
+    const wrap = document.getElementById("workItemList");
+    const rows = Array.from(wrap.querySelectorAll(".work-item-row"));
+    rows[idx]?.remove();
+}
+
+// 保存工作项列表到后端
+async function saveWorkList() {
+    const rows = document.querySelectorAll(".work-item-row input");
+    const newList = [];
+    rows.forEach(input => {
+        const val = input.value.trim();
+        if(val) newList.push(val);
+    });
+    if(newList.length === 0) return alert("工作项不能为空");
+
+    const res = await fetch("/api/saveWorkList", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ list: newList })
+    });
+    const json = await res.json();
+    if(json.code === 0) {
+        WORK_LIST = newList;
+        alert("保存成功，数据已同步");
+        backToAdmin();
+    } else {
+        alert(json.msg);
+    }
+}
 
 function switchLogin(type) {
     document.getElementById("staffLogin").classList.add("hide");
     document.getElementById("adminLogin").classList.add("hide");
     if(type === "staff") document.getElementById("staffLogin").classList.remove("hide");
     if(type === "admin") document.getElementById("adminLogin").classList.remove("hide");
-}
-
-function showPage(page) {
-    document.getElementById("pageLogin").classList.add("hide");
-    document.getElementById("pageStaffDate").classList.add("hide");
-    document.getElementById("pageStaffDetail").classList.add("hide");
-    document.getElementById("pageAdmin").classList.add("hide");
-    if(page === "login") document.getElementById("pageLogin").classList.remove("hide");
-    if(page === "staffDate") document.getElementById("pageStaffDate").classList.remove("hide");
-    if(page === "staffDetail") document.getElementById("pageStaffDetail").classList.remove("hide");
-    if(page === "admin") document.getElementById("pageAdmin").classList.remove("hide");
 }
 
 function logout() {
@@ -341,7 +431,7 @@ async function goDetail() {
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td>${name}</td>
-            <td><input type="number" step="0.1" id="work${idx}" value="${dayData[idx]}"></td>
+            <td><input type="number" step="0.1" id="work${idx}" value="${dayData[idx] || 0}"></td>
         `;
         table.appendChild(tr);
     });
@@ -371,6 +461,42 @@ async function saveStaffWork() {
     alert("保存成功");
 }
 
+// 刷新汇总表头 + 表格
+async function refreshTotalTable(){
+    const qYear = document.getElementById("queryYear").value;
+    const qMonth = document.getElementById("queryMonth").value;
+    const prefix = `${qYear}-${String(qMonth).padStart(2,'0')}`;
+
+    const res = await fetch("/api/getAllData");
+    const allData = await res.json();
+    const tableHead = document.getElementById("totalTableHead");
+    const tableBody = document.getElementById("totalTable");
+
+    // 动态生成表头
+    let headHtml = `<tr><th>人员</th>`;
+    WORK_LIST.forEach(item => headHtml += `<th>${item}</th>`);
+    headHtml += `</tr>`;
+    tableHead.innerHTML = headHtml;
+
+    tableBody.innerHTML = "";
+    allData.staffList.forEach(staff=>{
+        const workSum = WORK_LIST.map(()=>0);
+        const staffData = allData.workData[staff.id] || {};
+        Object.entries(staffData).forEach(([dateKey, dayArr])=>{
+            if(dateKey.startsWith(prefix)){
+                dayArr.forEach((val,idx)=>{
+                    if(workSum[idx] !== undefined) workSum[idx] += Number(val);
+                });
+            }
+        });
+        const tr = document.createElement("tr");
+        let html = `<td>${staff.name}</td>`;
+        workSum.forEach(item=> html += `<td>${item.toFixed(1)}</td>`);
+        tr.innerHTML = html;
+        tableBody.appendChild(tr);
+    });
+}
+
 async function renderAdminPage() {
     const res = await fetch("/api/getAllData");
     const allData = await res.json();
@@ -394,32 +520,6 @@ async function renderAdminPage() {
     });
     refreshTotalTable();
     loadLogList();
-}
-
-async function refreshTotalTable(){
-    const qYear = document.getElementById("queryYear").value;
-    const qMonth = document.getElementById("queryMonth").value;
-    const prefix = `${qYear}-${String(qMonth).padStart(2,'0')}`;
-
-    const res = await fetch("/api/getAllData");
-    const allData = await res.json();
-    const table = document.getElementById("totalTable");
-    table.innerHTML = "";
-
-    allData.staffList.forEach(staff=>{
-        const workSum = WORK_LIST.map(()=>0);
-        const staffData = allData.workData[staff.id] || {};
-        Object.entries(staffData).forEach(([dateKey, dayArr])=>{
-            if(dateKey.startsWith(prefix)){
-                dayArr.forEach((val,idx)=> workSum[idx] += Number(val));
-            }
-        });
-        const tr = document.createElement("tr");
-        let html = `<td>${staff.name}</td>`;
-        workSum.forEach(item=> html += `<td>${item.toFixed(1)}</td>`);
-        tr.innerHTML = html;
-        table.appendChild(tr);
-    });
 }
 
 async function addStaff() {
@@ -582,7 +682,14 @@ async function clearAllLog() {
     loadLogList();
 }
 
-showPage("login");
+// 页面初始化
+document.addEventListener('DOMContentLoaded', async function(){
+    document.getElementById('staffLoginBtn').addEventListener('click', staffLogin);
+    document.getElementById('adminLoginBtn').addEventListener('click', adminLogin);
+    await initWorkList();
+    initDateSelect();
+    showPage("login");
+});
 </script>
 </body>
 </html>
