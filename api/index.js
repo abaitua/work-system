@@ -3,11 +3,24 @@ const { Redis } = require('@upstash/redis');
 const path = require('path');
 const app = express();
 
-let redis = null;
-try {
-  redis = Redis.fromEnv();
-} catch (err) {
-  console.error('Redis 初始化失败:', err);
+// 全局禁用缓存，解决Vercel接口缓存问题
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
+// 统一获取Redis实例（每次调用重新初始化，适配Serverless）
+function getRedis() {
+  try {
+    const redis = Redis.fromEnv();
+    console.log("Redis 连接成功");
+    return redis;
+  } catch (err) {
+    console.error('Redis 连接失败:', err.message);
+    return null;
+  }
 }
 
 app.use(express.json());
@@ -39,16 +52,19 @@ const DEFAULT_TIME_CONFIG = {
 
 // 初始化
 async function initDefaultData() {
+  const redis = getRedis();
   if (!redis) return DEFAULT_DATA;
   await redis.set(DATA_KEY, JSON.stringify(DEFAULT_DATA));
   return DEFAULT_DATA;
 }
 async function initDefaultWorkList() {
+  const redis = getRedis();
   if (!redis) return DEFAULT_WORK_LIST;
   await redis.set(WORK_LIST_KEY, JSON.stringify(DEFAULT_WORK_LIST));
   return DEFAULT_WORK_LIST;
 }
 async function initDefaultTimeConfig() {
+  const redis = getRedis();
   if (!redis) return DEFAULT_TIME_CONFIG;
   await redis.set(TIME_CONFIG_KEY, JSON.stringify(DEFAULT_TIME_CONFIG));
   return DEFAULT_TIME_CONFIG;
@@ -56,12 +72,14 @@ async function initDefaultTimeConfig() {
 
 // 主数据读写
 async function readData() {
+  const redis = getRedis();
   if (!redis) return DEFAULT_DATA;
   let raw = await redis.get(DATA_KEY);
   if (!raw) return await initDefaultData();
   try { return JSON.parse(raw); } catch { return DEFAULT_DATA; }
 }
 async function writeData(data) {
+  const redis = getRedis();
   if (!redis) return;
   const copy = JSON.parse(JSON.stringify(data));
   await redis.set(DATA_KEY, JSON.stringify(copy));
@@ -69,36 +87,42 @@ async function writeData(data) {
 
 // 工作项列表
 async function readWorkList() {
+  const redis = getRedis();
   if (!redis) return DEFAULT_WORK_LIST;
   let raw = await redis.get(WORK_LIST_KEY);
   if (!raw) return await initDefaultWorkList();
   try { return JSON.parse(raw); } catch { return DEFAULT_WORK_LIST; }
 }
 async function writeWorkList(list) {
+  const redis = getRedis();
   if (!redis) return;
   await redis.set(WORK_LIST_KEY, JSON.stringify(list));
 }
 
 // 工时配置
 async function readTimeConfig() {
+  const redis = getRedis();
   if (!redis) return DEFAULT_TIME_CONFIG;
   let raw = await redis.get(TIME_CONFIG_KEY);
   if (!raw) return await initDefaultTimeConfig();
   try { return JSON.parse(raw); } catch { return DEFAULT_TIME_CONFIG; }
 }
 async function writeTimeConfig(config) {
+  const redis = getRedis();
   if (!redis) return;
   await redis.set(TIME_CONFIG_KEY, JSON.stringify(config));
 }
 
 // 日志
 async function readLog() {
+  const redis = getRedis();
   if (!redis) return DEFAULT_LOG;
   let raw = await redis.get(LOG_KEY);
   if (!raw) return DEFAULT_LOG;
   try { return JSON.parse(raw); } catch { return DEFAULT_LOG; }
 }
 async function addLog(logItem) {
+  const redis = getRedis();
   if (!redis) return;
   let logList = await readLog();
   logList.unshift(logItem);
@@ -106,6 +130,7 @@ async function addLog(logItem) {
   await redis.set(LOG_KEY, JSON.stringify(logList));
 }
 async function clearAllLog() {
+  const redis = getRedis();
   if (!redis) return;
   await redis.set(LOG_KEY, JSON.stringify(DEFAULT_LOG));
 }
@@ -134,7 +159,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
 
-// 工时配置接口 新增
+// 工时配置接口
 app.get('/api/getTimeConfig', async (req, res) => {
   try {
     const data = await readTimeConfig();
