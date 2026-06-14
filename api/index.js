@@ -150,15 +150,6 @@ app.post('/api/saveWorkList', async (req, res) => {
   }
 });
 
-// 工时标准配置保存接口
-app.post('/api/saveTimeConfig', async (req, res) => {
-  try {
-    res.json({ code: 0, msg: "配置保存成功" });
-  } catch (e) {
-    res.json({ code: -1, msg: "保存失败" });
-  }
-});
-
 // 管理员登录
 app.post('/api/admin/login', async (req, res) => {
   try {
@@ -359,4 +350,45 @@ app.post('/api/admin/getLog', async (req, res) => {
     }
     let logList = await readLog();
 
-    if (filter
+    if (filterStaffId && filterStaffId !== "") {
+      logList = logList.filter(item => item.operatorId === filterStaffId);
+    }
+    if (filterDate && filterDate !== "") {
+      logList = logList.filter(item => item.logDate === filterDate);
+    }
+
+    res.json({ code: 0, data: logList });
+  } catch {
+    res.json({ code: -1, msg: "获取日志失败" });
+  }
+});
+
+// 清空全部日志
+app.post('/api/admin/clearLog', async (req, res) => {
+  try {
+    const { username, pwd } = req.body;
+    const data = await readData();
+    if (data.admin.username !== username || data.admin.pwd !== pwd) {
+      return res.json({ code: 1, msg: "权限校验失败" });
+    }
+    await clearAllLog();
+
+    const now = new Date();
+    const timeStr = formatUTCDate(now);
+    await addLog({
+      time: timeStr,
+      logDate: "",
+      operator: "管理员",
+      operatorId: "admin",
+      type: "日志操作",
+      content: "手动清空全部操作日志",
+      workDetail: ""
+    });
+
+    res.json({ code: 0, msg: "日志已全部清空" });
+  } catch {
+    res.json({ code: -1, msg: "清空失败" });
+  }
+});
+
+module.exports = app;
