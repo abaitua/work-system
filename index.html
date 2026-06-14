@@ -17,7 +17,7 @@
         .btn-danger:hover{background:#f78989;}
         .btn-success{background:#67c23a;}
         .btn-success:hover{background:#85ce61;}
-        .login-box{max-width:400px;margin:30px auto;border:1px solid #eee;padding:20px;border-radius:6px;}
+        .login-box{max-width:400px;margin:30px auto;border:1px solid #eee;padding:20px;border-radius.6px;}
         .login-item{margin:10px 0;}
         .login-item label{display:block;margin-bottom:3px;}
         .login-item input{width:100%;padding:5px;border:1px solid #ccc;border-radius:3px;}
@@ -230,10 +230,9 @@ const DEFAULT_TIME_MAP = {
     "核对物料": 10
 };
 
-// 统一转为北京时间 UTC+8
+// 北京时间转换
 function formatChinaTime(timeStr) {
     const date = new Date(timeStr);
-    // 时区偏移修正 +8小时
     const localTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
     const year = localTime.getFullYear();
     const month = String(localTime.getMonth() + 1).padStart(2, '0');
@@ -502,7 +501,7 @@ function renderWorkItemList() {
         div.className = "work-item-row";
         div.innerHTML = `
             <input type="text" value="${item}" data-idx="${idx}">
-            <button class="btn btn-danger" onclick="delWorkItem(${idx})">删除</button>
+            <button class="btn btn-danger" onclick="delWorkItem(this)">删除</button>
         `;
         wrap.appendChild(div);
     });
@@ -517,10 +516,10 @@ function addWorkItem() {
     `;
     wrap.appendChild(div);
 }
-function delWorkItem(el) {
-    if(el.tagName === 'BUTTON'){
-        el.parentElement.remove();
-    }
+// 修复删除按钮
+function delWorkItem(btn) {
+    const row = btn.parentElement;
+    row.remove();
 }
 async function saveWorkList() {
     const inputs = document.querySelectorAll(".work-item-row input");
@@ -769,9 +768,7 @@ async function loadLogList() {
         }
         let html = "";
         logList.forEach(log => {
-            // 时间转北京时间
             const fmtTime = formatChinaTime(log.time);
-            // 全局替换 工时 → 次
             let workDetail = log.workDetail || "";
             workDetail = workDetail.replace(/工时/g, "次");
 
