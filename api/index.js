@@ -390,5 +390,50 @@ app.post('/api/admin/clearLog', async (req, res) => {
     res.json({ code: -1, msg: "清空失败" });
   }
 });
+// ========== 新增：工时配置 全局读写接口 ==========
+const TIME_CONFIG_KEY = "work_time_config";
+// 默认工时配置
+const DEFAULT_TIME_CONFIG = {
+  "首件": 20,
+  "巡检": 20,
+  "入库": 10,
+  "出货": 10,
+  "外箱标": 10,
+  "内箱标": 10,
+  "特标": 10,
+  "工单打印": 10,
+  "核对物料": 10
+};
+
+// 获取全局工时配置
+app.get('/api/getTimeConfig', async (req, res) => {
+  try {
+    if (!redisAvailable) {
+      return res.json({ code: 0, data: DEFAULT_TIME_CONFIG });
+    }
+    let config = await redis.get(TIME_CONFIG_KEY);
+    if (!config) {
+      config = DEFAULT_TIME_CONFIG;
+      await redis.set(TIME_CONFIG_KEY, config);
+    }
+    res.json({ code: 0, data: config });
+  } catch {
+    res.json({ code: 0, data: DEFAULT_TIME_CONFIG });
+  }
+});
+
+// 保存全局工时配置
+app.post('/api/saveTimeConfig', async (req, res) => {
+  try {
+    const config = req.body;
+    if (!redisAvailable) {
+      return res.json({ code: 0, msg: "配置已保存（内存模式，重启失效）" });
+    }
+    await redis.set(TIME_CONFIG_KEY, config);
+    res.json({ code: 0, msg: "配置已全局生效" });
+  } catch {
+    res.json({ code: -1, msg: "保存失败" });
+  }
+});
 
 module.exports = app;
