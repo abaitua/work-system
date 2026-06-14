@@ -17,7 +17,6 @@ app.use(express.static(path.join(__dirname, '..')));
 const DATA_KEY = "work_system_data";
 const LOG_KEY = "work_system_log";
 const WORK_LIST_KEY = "work_system_worklist";
-// 新增：工作项分钟配置Key
 const WORK_MIN_CFG_KEY = "work_system_min_config";
 
 // 默认基础数据
@@ -28,7 +27,6 @@ const DEFAULT_DATA = {
 };
 const DEFAULT_LOG = [];
 const DEFAULT_WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
-// 默认单次分钟配置（和工作项一一对应）
 const DEFAULT_MIN_CONFIG = {
   "首件": 20,
   "巡检": 20,
@@ -42,6 +40,17 @@ const DEFAULT_MIN_CONFIG = {
 };
 
 // ========== 通用工具函数 ==========
+// 北京时间 UTC+8
+function formatChinaTime(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const m = String(date.getMinutes()).padStart(2, '0');
+  const s = String(date.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${h}:${m}:${s}`;
+}
+
 // 次数 + 配置 → 计算总小时（保留2位小数）
 function calcTotalHour(workList, countArr, minCfg) {
   let totalMin = 0;
@@ -60,17 +69,6 @@ function alignWorkArray(oldArr, newLen) {
     res.push(oldArr[i] ?? 0);
   }
   return res;
-}
-
-// 时间格式化 UTC
-function formatUTCDate(date) {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  const h = String(date.getUTCHours()).padStart(2, '0');
-  const m = String(date.getUTCMinutes()).padStart(2, '0');
-  const s = String(date.getUTCSeconds()).padStart(2, '0');
-  return `${year}-${month}-${day} ${h}:${m}:${s}`;
 }
 
 // ========== Redis 读写封装 ==========
@@ -185,7 +183,7 @@ app.post('/api/saveWorkList', async (req, res) => {
 
     // 日志
     const now = new Date();
-    const timeStr = formatUTCDate(now);
+    const timeStr = formatChinaTime(now);
     await addLog({
       time: timeStr,
       logDate: "",
@@ -212,7 +210,7 @@ app.post('/api/saveMinConfig', async (req, res) => {
     await writeMinConfig(minCfg);
 
     const now = new Date();
-    const timeStr = formatUTCDate(now);
+    const timeStr = formatChinaTime(now);
     await addLog({
       time: timeStr,
       logDate: "",
@@ -296,10 +294,11 @@ app.post('/api/saveWorkData', async (req, res) => {
     });
 
     const now = new Date();
-    const timeStr = formatUTCDate(now);
+    const timeStr = formatChinaTime(now);
+    const logDate = day;
     await addLog({
       time: timeStr,
-      logDate: day,
+      logDate: logDate,
       operator: staffName || '未知员工',
       operatorId: staffId,
       type: "工时填报",
@@ -405,7 +404,7 @@ app.post('/api/admin/updateStaffPwd', async (req, res) => {
     await writeData(data);
 
     const now = new Date();
-    const timeStr = formatUTCDate(now);
+    const timeStr = formatChinaTime(now);
     await addLog({
       time: timeStr,
       logDate: "",
@@ -422,7 +421,7 @@ app.post('/api/admin/updateStaffPwd', async (req, res) => {
   }
 });
 
-// 获取日志
+// 获取日志（支持员工+日期筛选）
 app.post('/api/admin/getLog', async (req, res) => {
   try {
     const { username, pwd, filterStaffId, filterDate } = req.body;
@@ -431,12 +430,14 @@ app.post('/api/admin/getLog', async (req, res) => {
       return res.json({ code: 1, msg: "权限校验失败" });
     }
     let logList = await readLog();
+
     if (filterStaffId && filterStaffId !== "") {
       logList = logList.filter(item => item.operatorId === filterStaffId);
     }
     if (filterDate && filterDate !== "") {
       logList = logList.filter(item => item.logDate === filterDate);
     }
+
     res.json({ code: 0, data: logList });
   } catch {
     res.json({ code: -1, msg: "获取日志失败" });
@@ -452,8 +453,9 @@ app.post('/api/admin/clearLog', async (req, res) => {
       return res.json({ code: 1, msg: "权限校验失败" });
     }
     await clearAllLog();
+
     const now = new Date();
-    const timeStr = formatUTCDate(now);
+    const timeStr = formatChinaTime(now);
     await addLog({
       time: timeStr,
       logDate: "",
@@ -463,6 +465,7 @@ app.post('/api/admin/clearLog', async (req, res) => {
       content: "手动清空全部操作日志",
       workDetail: ""
     });
+
     res.json({ code: 0, msg: "日志已全部清空" });
   } catch {
     res.json({ code: -1, msg: "清空失败" });
