@@ -39,15 +39,17 @@ const DEFAULT_MIN_CONFIG = {
   "核对物料": 10
 };
 
-// ========== 通用工具函数 ==========
-// 北京时间 UTC+8
+// 北京时间 UTC+8 强制偏移8小时（解决服务器时区问题）
 function formatChinaTime(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const h = String(date.getHours()).padStart(2, '0');
-  const m = String(date.getMinutes()).padStart(2, '0');
-  const s = String(date.getSeconds()).padStart(2, '0');
+  const utcTime = date.getTime();
+  // 偏移 8 小时 = 8 * 60 * 60 * 1000 毫秒
+  const chinaTime = new Date(utcTime + 8 * 60 * 60 * 1000);
+  const year = chinaTime.getFullYear();
+  const month = String(chinaTime.getMonth() + 1).padStart(2, '0');
+  const day = String(chinaTime.getDate()).padStart(2, '0');
+  const h = String(chinaTime.getHours()).padStart(2, '0');
+  const m = String(chinaTime.getMinutes()).padStart(2, '0');
+  const s = String(chinaTime.getSeconds()).padStart(2, '0');
   return `${year}-${month}-${day} ${h}:${m}:${s}`;
 }
 
