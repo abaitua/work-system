@@ -23,16 +23,13 @@
         .login-item input{width:100%;padding:5px;border:1px solid #ccc;border-radius:3px;}
         .tab{margin:12px 0;text-align:center;}
         .tab button{margin:0 8px;}
-        .date-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin:12px 0;}
-        .date-item{border:1px solid #eee;padding:8px;border-radius:4px;text-align:center;cursor:pointer;}
-        .date-item:hover{background:#f0f7ff;}
         table{width:100%;border-collapse:collapse;margin:10px 0;}
         th,td{border:1px solid #ccc;padding:6px;text-align:center;}
         th{background:#f8f9fa;}
         input[type="number"]{width:100%;padding:5px;border:1px solid #ddd;border-radius:3px;}
         .hide{display:none;}
         .split{margin:12px 0;border-top:1px solid #eee;}
-        .select-row{margin:8px 0;text-align:center;gap:8px;display:flex;justify-content:center;flex-wrap:wrap;}
+        .select-row{margin:8px 0;gap:8px;display:flex;flex-wrap:wrap;align-items:center;}
         .select-row select{padding:5px;border:1px solid #ccc;border-radius:3px;min-width:90px;}
         .work-item-list{max-width:550px;margin:10px 0;}
         .work-item-row{display:flex;align-items:center;gap:6px;margin:5px 0;padding:5px;border:1px solid #eee;border-radius:3px;}
@@ -91,6 +88,7 @@
         </div>
     </div>
 
+    <!-- 员工填写页：仅填写次数，自动计算时长 -->
     <div id="pageStaffDetail" class="hide">
         <h2><span id="detailStaffName"></span> <span id="selectDateText"></span> - 工作次数填写</h2>
         <button class="btn" type="button" onclick="backToDate()">返回日期选择</button>
@@ -214,9 +212,12 @@
 </div>
 
 <script>
+// 全局配置
+const API_BASE = "/api";
+let STAFF_LIST = [];
 // 工作项列表
 let WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
-// 每项工作 单次分钟数（管理员可配置）
+// 单次耗时(分钟) 管理员可配置
 let WORK_TIME_MAP = {
     "首件": 20,
     "巡检": 20,
@@ -314,7 +315,7 @@ function showPage(page) {
     if(pageMap[page]) document.getElementById(pageMap[page]).classList.remove('hide');
 }
 
-// 工时标准配置页
+// 工时标准配置
 function goTimeConfig() {
     showPage("timeConfig");
     renderTimeConfig();
@@ -323,7 +324,6 @@ function backToAdmin() {
     showPage("admin");
     refreshTotalTable();
 }
-// 渲染工时配置项
 function renderTimeConfig() {
     const wrap = document.getElementById("timeConfigWrap");
     wrap.innerHTML = "";
@@ -339,7 +339,6 @@ function renderTimeConfig() {
         wrap.appendChild(div);
     });
 }
-// 保存工时配置
 function saveTimeConfig() {
     const inputs = document.querySelectorAll(".time-config-row input");
     inputs.forEach(inp => {
@@ -420,6 +419,7 @@ async function staffLogin() {
     document.getElementById("currStaffName").innerText = currStaffName;
     showPage("staffDate");
 }
+
 // 管理员登录
 async function adminLogin() {
     const user = document.getElementById("adminUser").value.trim();
@@ -429,7 +429,7 @@ async function adminLogin() {
     showPage("admin");
 }
 
-// 员工进入填写页
+// 员工填写页面 - 次数录入 + 自动计算
 async function goDetail() {
     currentDateKey = getFormatDate();
     const y = document.getElementById("selYear").value;
@@ -438,9 +438,12 @@ async function goDetail() {
     document.getElementById("detailStaffName").innerText = currStaffName;
     document.getElementById("selectDateText").innerText = `${y}年${m}月${d}日`;
 
-    // 模拟读取历史次数
-    const dayData = window.localStorage.getItem(`work_${currStaffId}_${currentDateKey}`);
-    let countArr = dayData ? JSON.parse(dayData) : WORK_LIST.map(()=>0);
+    let countArr = WORK_LIST.map(()=>0);
+    try{
+        const res = await fetch(`${API_BASE}/work/get?staffName=${encodeURIComponent(currStaffName)}&date=${currentDateKey}`);
+        const resData = await res.json();
+        if(resData.code === 0 && resData.data) countArr = resData.data;
+    }catch(e){}
 
     const table = document.getElementById("detailTable");
     table.innerHTML = "";
@@ -460,6 +463,7 @@ async function goDetail() {
     calcDayTotal();
     showPage("staffDetail");
 }
+
 // 实时计算当日总工时
 function calcDayTotal(){
     let totalMin = 0;
@@ -473,9 +477,11 @@ function calcDayTotal(){
     const totalHour = (totalMin / 60).toFixed(2);
     document.getElementById("dayTotalHour").innerText = totalHour;
 }
+
 function backToDate() {
     showPage("staffDate");
 }
+
 // 保存员工填写的次数
 async function saveStaffWork() {
     const countArr = [];
@@ -483,53 +489,218 @@ async function saveStaffWork() {
         const val = Number(document.getElementById("count"+idx).value) || 0;
         countArr.push(val);
     });
-    // 本地存储次数（后端可替换接口）
-    window.localStorage.setItem(`work_${currStaffId}_${currentDateKey}`, JSON.stringify(countArr));
-    alert("数据保存成功");
+    try{
+        const res = await fetch(`${API_BASE}/work/save`,{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+                staffName: currStaffName,
+                date: currentDateKey,
+                countArr: countArr
+            })
+        });
+        const resData = await res.json();
+        alert(resData.msg || "保存成功");
+    }catch(e){
+        alert("保存失败，请检查服务");
+    }
 }
 
-// 管理员-月度汇总（换算工时）
+// 管理员 - 加载员工列表 & 渲染页面
+async function renderAdminPage() {
+    const delStaffSel = document.getElementById("delStaffSel");
+    const logStaffSel = document.getElementById("logStaffSel");
+    const staffBox = document.getElementById("staffManageList");
+
+    try {
+        const res = await fetch(`${API_BASE}/staff/list`);
+        const resData = await res.json();
+        if(resData.code !== 0) {
+            alert(resData.msg || "获取员工列表失败");
+            return;
+        }
+        STAFF_LIST = resData.data || [];
+    } catch (e) {
+        alert("接口请求异常，请检查后端服务");
+        return;
+    }
+
+    delStaffSel.innerHTML = "<option value=''>全部员工</option>";
+    logStaffSel.innerHTML = "<option value=''>全部员工</option>";
+    staffBox.innerHTML = "<h4>现有员工列表</h4>";
+
+    STAFF_LIST.forEach(staff => {
+        const { id, name, pwd } = staff;
+        delStaffSel.innerHTML += `<option value="${id}">${name}</option>`;
+        logStaffSel.innerHTML += `<option value="${id}">${name}</option>`;
+        const div = document.createElement("div");
+        div.innerHTML = `
+            姓名：${name} &nbsp;&nbsp; 密码：${pwd}
+            <input type="password" id="editPwd_${id}" placeholder="新密码">
+            <button class="btn" onclick="updateStaffPwd('${id}')">修改密码</button>
+            <button class="btn btn-danger" onclick="delStaff('${id}')">删除</button>
+        `;
+        staffBox.appendChild(div);
+    });
+
+    refreshTotalTable();
+    loadLogList();
+}
+
+// 新增员工
+async function addStaff() {
+    const name = document.getElementById("newStaffName").value.trim();
+    const pwd = document.getElementById("newStaffPwd").value.trim();
+    if(!name || !pwd) return alert("请填写姓名和密码");
+
+    try {
+        const res = await fetch(`${API_BASE}/staff/add`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, pwd })
+        });
+        const resData = await res.json();
+        alert(resData.msg);
+        if(resData.code === 0) {
+            document.getElementById("newStaffName").value = "";
+            document.getElementById("newStaffPwd").value = "";
+            await renderAdminPage();
+        }
+    } catch (e) {
+        alert("请求失败");
+    }
+}
+
+// 删除员工
+async function delStaff(id) {
+    if(!confirm("确定删除该员工？关联数据将一并清除")) return;
+    try {
+        const res = await fetch(`${API_BASE}/staff/delete?id=${id}`, {
+            method: "DELETE"
+        });
+        const resData = await res.json();
+        alert(resData.msg);
+        if(resData.code === 0) {
+            await renderAdminPage();
+        }
+    } catch (e) {
+        alert("请求失败");
+    }
+}
+
+// 修改员工密码
+async function updateStaffPwd(staffId) {
+    const newPwd = document.getElementById(`editPwd_${staffId}`).value.trim();
+    if(!newPwd) return alert("请输入新密码");
+    if(newPwd.length < 3) return alert("密码长度不能少于3位");
+
+    try {
+        const res = await fetch(`${API_BASE}/staff/updatePwd`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: staffId, newPwd })
+        });
+        const resData = await res.json();
+        alert(resData.msg);
+        if(resData.code === 0) {
+            await renderAdminPage();
+        }
+    } catch (e) {
+        alert("请求失败");
+    }
+}
+
+// 删除月度工时数据
+async function delMonthData(){
+    const staffId = document.getElementById("delStaffSel").value;
+    const y = document.getElementById("delYearSel").value;
+    const m = document.getElementById("delMonthSel").value;
+    if(!confirm("确定删除所选年月工时数据？")) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/work/delMonth`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ staffId, year: y, month: m })
+        });
+        const resData = await res.json();
+        alert(resData.msg);
+        await renderAdminPage();
+    } catch (e) {
+        alert("请求失败");
+    }
+}
+
+// 管理员修改密码
+async function updateAdminPwd(){
+    const oldPwd = document.getElementById("oldAdminPwd").value.trim();
+    const newPwd = document.getElementById("newAdminPwd").value.trim();
+    const confirmPwd = document.getElementById("confirmAdminPwd").value.trim();
+
+    if(!oldPwd || !newPwd || !confirmPwd){
+        return alert("请完整填写所有密码项");
+    }
+    if(newPwd !== confirmPwd){
+        return alert("两次输入的新密码不一致");
+    }
+    if(newPwd.length < 3){
+        return alert("新密码长度不能少于3位");
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/admin/updatePwd`, {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({ oldPwd, newPwd })
+        });
+        const json = await res.json();
+        alert(json.msg);
+        if(json.code === 0){
+            document.getElementById("oldAdminPwd").value = "";
+            document.getElementById("newAdminPwd").value = "";
+            document.getElementById("confirmAdminPwd").value = "";
+        }
+    } catch (e) {
+        alert("请求失败");
+    }
+}
+
+// 月度工时汇总
 async function refreshTotalTable(){
     const qYear = document.getElementById("queryYear").value;
     const qMonth = document.getElementById("queryMonth").value;
     const prefix = `${qYear}-${String(qMonth).padStart(2,'0')}`;
 
-    // 模拟员工列表
-    const staffList = [
-        {id:"s1", name:"员工A"},
-        {id:"s2", name:"员工B"}
-    ];
-
     const tableHead = document.getElementById("totalTableHead");
     const tableBody = document.getElementById("totalTable");
 
-    // 表头：工作项 + 月度总工时
     let headHtml = `<tr><th>人员</th>`;
     WORK_LIST.forEach(item => headHtml += `<th>${item}(小时)</th>`);
     headHtml += `<th>月度合计(小时)</th></tr>`;
     tableHead.innerHTML = headHtml;
-
     tableBody.innerHTML = "";
-    staffList.forEach(staff=>{
+
+    for(let staff of STAFF_LIST){
         let monthTotalMin = 0;
         const itemHourArr = WORK_LIST.map(()=>0);
-
-        // 遍历当月所有日期
-        const now = new Date(qYear, qMonth-1, 1);
         const lastDay = new Date(qYear, qMonth, 0).getDate();
+
         for(let d=1; d<=lastDay; d++){
             const dateStr = `${qYear}-${String(qMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-            const data = window.localStorage.getItem(`work_${staff.id}_${dateStr}`);
-            if(!data) continue;
-            const countArr = JSON.parse(data);
+            try{
+                const res = await fetch(`${API_BASE}/work/get?staffName=${encodeURIComponent(staff.name)}&date=${dateStr}`);
+                const resData = await res.json();
+                if(resData.code !== 0 || !resData.data) continue;
+                const countArr = resData.data;
 
-            countArr.forEach((count, idx) => {
-                const name = WORK_LIST[idx];
-                const onceMin = WORK_TIME_MAP[name] || 10;
-                const dayMin = count * onceMin;
-                monthTotalMin += dayMin;
-                itemHourArr[idx] += dayMin / 60;
-            });
+                countArr.forEach((count, idx) => {
+                    const name = WORK_LIST[idx];
+                    const onceMin = WORK_TIME_MAP[name] || 10;
+                    const dayMin = count * onceMin;
+                    monthTotalMin += dayMin;
+                    itemHourArr[idx] += dayMin / 60;
+                });
+            }catch(e){continue;}
         }
 
         const tr = document.createElement("tr");
@@ -539,74 +710,10 @@ async function refreshTotalTable(){
         html += `<td class="total-hour">${totalHour}</td>`;
         tr.innerHTML = html;
         tableBody.appendChild(tr);
-    });
+    }
 }
 
-// 管理员页面渲染
-async function renderAdminPage() {
-    const delStaffSel = document.getElementById("delStaffSel");
-    const logStaffSel = document.getElementById("logStaffSel");
-    const staffBox = document.getElementById("staffManageList");
-    delStaffSel.innerHTML = "<option value=''>全部员工</option>";
-    logStaffSel.innerHTML = "<option value=''>全部员工</option>";
-    staffBox.innerHTML = "<h4>现有员工列表</h4>";
-
-    // 模拟员工数据
-    const staffList = [
-        {id:"s1", name:"员工A", pwd:"123"},
-        {id:"s2", name:"员工B", pwd:"123"}
-    ];
-    staffList.forEach(staff=>{
-        delStaffSel.innerHTML += `<option value="${staff.id}">${staff.name}</option>`;
-        logStaffSel.innerHTML += `<option value="${staff.id}">${staff.name}</option>`;
-        const div = document.createElement("div");
-        div.innerHTML = `姓名：${staff.name} &nbsp;&nbsp; 密码：${staff.pwd}
-        <input type="password" id="editPwd_${staff.id}" placeholder="新密码">
-        <button class="btn" onclick="updateStaffPwd('${staff.id}')">修改密码</button>
-        <button class="btn btn-danger" onclick="delStaff('${staff.id}')">删除</button>`;
-        staffBox.appendChild(div);
-    });
-    refreshTotalTable();
-    loadLogList();
-}
-
-// 以下原有功能（员工增删、密码、日志、数据清理）保留
-async function addStaff() {
-    const name = document.getElementById("newStaffName").value.trim();
-    const pwd = document.getElementById("newStaffPwd").value.trim();
-    if(!name || !pwd) return alert("请填写姓名和密码");
-    alert("新增员工成功");
-    document.getElementById("newStaffName").value = "";
-    document.getElementById("newStaffPwd").value = "";
-    await renderAdminPage();
-}
-async function delStaff(id) {
-    if(!confirm("确定删除该员工？数据将一并清除")) return;
-    alert("删除成功");
-    await renderAdminPage();
-}
-async function delMonthData(){
-    if(!confirm("确定删除所选年月工时数据？")) return;
-    alert("数据清理成功");
-    await renderAdminPage();
-}
-async function updateAdminPwd(){
-    const oldPwd = document.getElementById("oldAdminPwd").value.trim();
-    const newPwd = document.getElementById("newAdminPwd").value.trim();
-    const confirmPwd = document.getElementById("confirmAdminPwd").value.trim();
-    if(!oldPwd || !newPwd || !confirmPwd) return alert("请完整填写密码");
-    if(newPwd !== confirmPwd) return alert("两次新密码不一致");
-    alert("管理员密码修改成功");
-    document.getElementById("oldAdminPwd").value = "";
-    document.getElementById("newAdminPwd").value = "";
-    document.getElementById("confirmAdminPwd").value = "";
-}
-async function updateStaffPwd(staffId) {
-    const newPwd = document.getElementById(`editPwd_${staffId}`).value.trim();
-    if(!newPwd) return alert("请输入新密码");
-    alert("员工密码修改成功");
-    await renderAdminPage();
-}
+// 日志功能
 async function loadLogList() {
     const logTable = document.getElementById("logTable");
     logTable.innerHTML = `<tr><td colspan='5' style='text-align:center;'>暂无日志数据</td></tr>`;
@@ -617,7 +724,7 @@ async function clearAllLog() {
     loadLogList();
 }
 
-// 初始化
+// 页面初始化
 document.addEventListener('DOMContentLoaded', function(){
     document.getElementById('staffLoginBtn').addEventListener('click', staffLogin);
     document.getElementById('adminLoginBtn').addEventListener('click', adminLogin);
