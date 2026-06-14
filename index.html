@@ -365,13 +365,8 @@ async function staffLogin() {
 }
 
 async function goDetail() {
-  // 每次进入页面强制拉取后端最新工作项
-  try {
-    const resList = await fetch(`${API_BASE}/api/getWorkList`);
-    const jsonList = await resList.json();
-    if (jsonList.code === 0) WORK_LIST = jsonList.list || [];
-  } catch (e) {}
-
+  // 每次进入强制拉取最新后端工作项
+  await loadBaseData();
   const y = document.getElementById('selYear').value;
   const m = String(document.getElementById('selMonth').value).padStart(2, '0');
   const d = String(document.getElementById('selDay').value).padStart(2, '0');
@@ -449,6 +444,7 @@ async function adminLogin() {
       adminUsername = user;
       adminPwd = pwd;
       showPage('pageAdmin');
+      await loadBaseData();
       await renderAdminPage();
       refreshTotalTable();
     } else {
@@ -491,7 +487,8 @@ async function renderAdminPage() {
   });
 }
 
-function goWorkEdit() {
+async function goWorkEdit() {
+  await loadBaseData();
   showPage('pageWorkEdit');
   const wrap = document.getElementById('workItemList');
   wrap.innerHTML = "";
@@ -711,6 +708,7 @@ async function updateAdminPwd() {
 }
 
 async function refreshTotalTable() {
+  await loadBaseData();
   try {
     const res = await fetch(`${API_BASE}/api/getAllData`);
     const json = await res.json();
