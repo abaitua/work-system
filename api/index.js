@@ -37,7 +37,7 @@ const DEFAULT_TIME_CONFIG = {
   "核对物料": 10
 };
 
-// 初始化
+// 初始化函数
 async function initDefaultData() {
   if (!redis) return DEFAULT_DATA;
   await redis.set(DATA_KEY, JSON.stringify(DEFAULT_DATA));
@@ -53,6 +53,23 @@ async function initDefaultTimeConfig() {
   await redis.set(TIME_CONFIG_KEY, JSON.stringify(DEFAULT_TIME_CONFIG));
   return DEFAULT_TIME_CONFIG;
 }
+
+// ========== 新增：服务启动自检，缺失则自动初始化所有配置 ==========
+(async function serverInit() {
+  if (!redis) return;
+  // 校验主数据
+  let dataRaw = await redis.get(DATA_KEY);
+  if (!dataRaw) await initDefaultData();
+  // 校验工作项
+  let workRaw = await redis.get(WORK_LIST_KEY);
+  if (!workRaw) await initDefaultWorkList();
+  // 校验耗时配置（核心修复：启动必检查，空则写入默认值）
+  let timeRaw = await redis.get(TIME_CONFIG_KEY);
+  if (!timeRaw) await initDefaultTimeConfig();
+  // 校验日志
+  let logRaw = await redis.get(LOG_KEY);
+  if (!logRaw) await redis.set(LOG_KEY, JSON.stringify(DEFAULT_LOG));
+})();
 
 // 主数据读写
 async function readData() {
@@ -79,7 +96,7 @@ async function writeWorkList(list) {
   await redis.set(WORK_LIST_KEY, JSON.stringify(list));
 }
 
-// 耗时配置 读写云端Redis（全局同步）
+// 耗时配置 读写云端Redis
 async function readTimeConfig() {
   if (!redis) return DEFAULT_TIME_CONFIG;
   let raw = await redis.get(TIME_CONFIG_KEY);
@@ -88,7 +105,9 @@ async function readTimeConfig() {
 }
 async function writeTimeConfig(config) {
   if (!redis) return;
-  await redis.set(TIME_CONFIG_KEY, JSON.stringify(config));
+  // 深拷贝防篡改
+  const copy = JSON.parse(JSON.stringify(config));
+  await redis.set(TIME_CONFIG_KEY, JSON.stringify(copy));
 }
 
 // 日志
@@ -134,20 +153,25 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
 
-// 读取耗时配置（从云端）
+// 读取耗时配置
 app.get('/api/getTimeConfig', async (req, res) => {
   try {
     const data = await readTimeConfig();
     res.json({ code: 0, data });
   } catch (e) {
+    console.error("读取耗时配置失败：", e);
     res.json({ code: -1, data: DEFAULT_TIME_CONFIG });
   }
 });
 
-// 保存耗时配置（写入云端Redis，所有设备同步）
+// 保存耗时配置（强写入Redis，全局持久化）
 app.post('/api/saveTimeConfig', async (req, res) => {
   try {
     const config = req.body;
+    // 基础校验：必须是对象
+    if (typeof config !== 'object' || config === null) {
+      return res.json({ code: -1, msg: "配置格式错误" });
+    }
     await writeTimeConfig(config);
 
     const now = new Date();
@@ -163,7 +187,7 @@ app.post('/api/saveTimeConfig', async (req, res) => {
     });
     res.json({ code: 0, msg: "耗时配置已保存，全局生效" });
   } catch (e) {
-    console.error(e);
+    console.error("保存耗时配置失败：", e);
     res.json({ code: -1, msg: "保存失败" });
   }
 });
@@ -177,6 +201,8 @@ app.get('/api/getWorkList', async (req, res) => {
     res.json({ code: -1, list: DEFAULT_WORK_LIST });
   }
 });
+
+// ========== 核心联动修复：修改工作项时，自动同步更新耗时配置 ==========
 app.post('/api/saveWorkList', async (req, res) => {
   try {
     const { list } = req.body;
@@ -191,6 +217,14 @@ app.post('/api/saveWorkList', async (req, res) => {
         dayMap[dateKey] = alignWorkArray(dayMap[dateKey] || [], newLen);
       });
     });
+
+    // 同步更新耗时配置：新增项默认10分钟，删除项同步移除
+    let timeConfig = await readTimeConfig();
+    let newTimeConfig = {};
+    list.forEach(item => {
+      newTimeConfig[item] = timeConfig[item] ?? 10;
+    });
+    await writeTimeConfig(newTimeConfig);
 
     await writeWorkList(list);
     await writeData(data);
