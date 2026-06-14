@@ -79,7 +79,7 @@ async function writeWorkList(list) {
   await redis.set(WORK_LIST_KEY, JSON.stringify(list));
 }
 
-// 工时配置
+// 耗时配置 读写云端Redis（全局同步）
 async function readTimeConfig() {
   if (!redis) return DEFAULT_TIME_CONFIG;
   let raw = await redis.get(TIME_CONFIG_KEY);
@@ -134,7 +134,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
 
-// 工时配置接口 新增
+// 读取耗时配置（从云端）
 app.get('/api/getTimeConfig', async (req, res) => {
   try {
     const data = await readTimeConfig();
@@ -143,10 +143,13 @@ app.get('/api/getTimeConfig', async (req, res) => {
     res.json({ code: -1, data: DEFAULT_TIME_CONFIG });
   }
 });
+
+// 保存耗时配置（写入云端Redis，所有设备同步）
 app.post('/api/saveTimeConfig', async (req, res) => {
   try {
     const config = req.body;
     await writeTimeConfig(config);
+
     const now = new Date();
     const timeStr = formatUTCDate(now);
     await addLog({
@@ -158,7 +161,7 @@ app.post('/api/saveTimeConfig', async (req, res) => {
       content: "修改每项工作单次耗时配置",
       workDetail: ""
     });
-    res.json({ code: 0, msg: "工时配置保存成功" });
+    res.json({ code: 0, msg: "耗时配置已保存，全局生效" });
   } catch (e) {
     console.error(e);
     res.json({ code: -1, msg: "保存失败" });
