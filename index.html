@@ -365,6 +365,13 @@ async function staffLogin() {
 }
 
 async function goDetail() {
+  // 每次进入页面强制拉取后端最新工作项
+  try {
+    const resList = await fetch(`${API_BASE}/api/getWorkList`);
+    const jsonList = await resList.json();
+    if (jsonList.code === 0) WORK_LIST = jsonList.list || [];
+  } catch (e) {}
+
   const y = document.getElementById('selYear').value;
   const m = String(document.getElementById('selMonth').value).padStart(2, '0');
   const d = String(document.getElementById('selDay').value).padStart(2, '0');
@@ -535,6 +542,7 @@ async function saveWorkItemList() {
       WORK_LIST.forEach(name => {
         if (!WORK_TIME_MAP[name]) WORK_TIME_MAP[name] = 10;
       });
+      await initTimeConfig();
       alert("保存成功");
       backAdmin();
     } else {
