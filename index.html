@@ -17,7 +17,7 @@
         .btn-danger:hover{background:#f78989;}
         .btn-success{background:#67c23a;}
         .btn-success:hover{background:#85ce61;}
-        .login-box{max-width:400px;margin:30px auto;border:1px solid #eee;padding:20px;border-radius.6px;}
+        .login-box{max-width:400px;margin:30px auto;border:1px solid #eee;padding:20px;border-radius:6px;}
         .login-item{margin:10px 0;}
         .login-item label{display:block;margin-bottom:3px;}
         .login-item input{width:100%;padding:5px;border:1px solid #ccc;border-radius:3px;}
@@ -459,7 +459,8 @@ async function renderAdminPage() {
         const res = await fetch(`${API_BASE}/api/getAllData`);
         const json = await res.json();
         STAFF_LIST = json.staffList || [];
-        allStaffWorkData = json.allWorkData || {};
+        // 兼容后端两种字段 allWorkData / allStaffWorkData
+        allStaffWorkData = json.allWorkData || json.allStaffWorkData || {};
     } catch (e) {
         STAFF_LIST = [];
         allStaffWorkData = {};
@@ -518,8 +519,7 @@ function addWorkItem() {
 }
 // 修复删除按钮
 function delWorkItem(btn) {
-    const row = btn.parentElement;
-    row.remove();
+    btn.parentElement.remove();
 }
 async function saveWorkList() {
     const inputs = document.querySelectorAll(".work-item-row input");
@@ -698,25 +698,32 @@ async function updateAdminPwd() {
 }
 
 function refreshTotalTable() {
+    // 获取选择的年月
     const qYear = document.getElementById('queryYear').value;
     const qMonth = document.getElementById('queryMonth').value;
+    // 拼接日期前缀 格式：2026-06
     const prefix = `${qYear}-${String(qMonth).padStart(2, '0')}`;
+    // 获取当月总天数
     const lastDay = new Date(qYear, qMonth, 0).getDate();
 
     const head = document.getElementById('totalTableHead');
     const body = document.getElementById('totalTableBody');
 
+    // 动态生成表头
     let headHtml = `<tr><th>人员</th>`;
     WORK_LIST.forEach(item => headHtml += `<th>${item}(小时)</th>`);
     headHtml += `<th>月度合计(小时)</th></tr>`;
     head.innerHTML = headHtml;
 
     let allRows = "";
+    // 遍历所有员工
     STAFF_LIST.forEach(staff => {
+        // 当前员工所有数据
         const workData = allStaffWorkData[staff.id] || {};
         let monthTotalMin = 0;
         const itemHourArr = WORK_LIST.map(()=>0);
 
+        // 遍历当月每一天
         for(let d = 1; d <= lastDay; d++){
             const dayStr = `${prefix}-${String(d).padStart(2, '0')}`;
             const countArr = workData[dayStr] || [];
@@ -729,6 +736,7 @@ function refreshTotalTable() {
             });
         }
 
+        // 拼接单元格
         let trHtml = `<td>${staff.name}</td>`;
         itemHourArr.forEach(h => trHtml += `<td>${h.toFixed(2)}</td>`);
         const totalHour = (monthTotalMin / 60).toFixed(2);
