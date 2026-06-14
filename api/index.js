@@ -11,10 +11,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// 统一获取Redis实例（每次调用重新初始化，适配Serverless）
 function getRedis() {
   try {
-    const redis = Redis.fromEnv();
+    // 复用你Vercel已有的KV前缀环境变量
+    const redis = new Redis({
+      url: process.env.KV_REST_API_URL,
+      token: process.env.KV_REST_API_TOKEN
+    });
     console.log("Redis 连接成功");
     return redis;
   } catch (err) {
