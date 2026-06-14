@@ -38,6 +38,7 @@
         #staffManageList > div{margin:4px auto;padding:6px;border:1px solid #eee;border-radius:3px;max-width:800px;}
         #staffManageList input{width:110px;padding:4px;margin:0 4px;}
         .total-hour{color:#e64340;font-weight:bold;}
+        div{text-align:center;}
     </style>
 </head>
 <body>
@@ -58,7 +59,7 @@
                 <input type="password" id="staffPwd">
             </div>
             <div style="text-align:center;">
-                <button class="btn btn-success" type="button" onclick="staffLogin()">登录</button>
+                <button class="btn btn-success" type="button" id="btnStaffLogin">登录</button>
             </div>
         </div>
         <div class="login-box hide" id="adminLogin">
@@ -71,20 +72,19 @@
                 <input type="password" id="adminPwd">
             </div>
             <div style="text-align:center;">
-                <button class="btn btn-success" type="button" onclick="adminLogin()">登录</button>
+                <button class="btn btn-success" type="button" id="btnAdminLogin">登录</button>
             </div>
         </div>
     </div>
 
     <div id="pageStaffDate" class="hide">
         <h2>欢迎：<span id="currStaffName"></span></h2>
-        <button class="btn btn-danger" type="button" onclick="logout()">退出登录</button>
+        <button class="btn" type="button" onclick="logout()">退出登录</button>
         <div class="select-row">
             <select id="selYear"></select>
             <select id="selMonth"></select>
             <select id="selDay"></select>
             <button class="btn btn-success" onclick="goDetail()">进入填写</button>
-            <button class="btn" onclick="refreshWorkList()">刷新工作项</button>
         </div>
     </div>
 
@@ -100,23 +100,23 @@
             </thead>
             <tbody id="detailTable"></tbody>
         </table>
-        <button class="btn btn-success" onclick="saveStaffWork()">保存数据</button>
+        <button class="btn btn-success" type="button" onclick="saveStaffWork()">保存数据</button>
     </div>
 
     <div id="pageWorkEdit" class="hide">
         <h2>工作内容编辑</h2>
-        <button class="btn" onclick="backAdmin()">返回管理员后台</button>
+        <button class="btn" onclick="backToAdmin()">返回管理员后台</button>
         <div class="split"></div>
         <div style="max-width:550px;margin:0 auto;">
             <button class="btn btn-success" onclick="addWorkItem()">新增工作项</button>
-            <button class="btn" onclick="saveWorkItemList()">保存修改</button>
+            <button class="btn" onclick="saveWorkList()">保存修改</button>
             <div id="workItemList" class="work-item-list"></div>
         </div>
     </div>
 
     <div id="pageTimeConfig" class="hide">
         <h2>工时标准配置</h2>
-        <button class="btn" onclick="backAdmin()">返回管理员后台</button>
+        <button class="btn" onclick="backToAdmin()">返回管理员后台</button>
         <div class="split"></div>
         <h4>设置每项工作单次耗时(分钟)，修改后全局生效</h4>
         <div id="timeConfigWrap"></div>
@@ -160,7 +160,7 @@
             </select>
             <select id="delYearSel"></select>
             <select id="delMonthSel"></select>
-            <button class="btn btn-danger" onclick="delMonthData()">删除所选月份数据</button>
+            <button class="btn btn-danger" onclick="delMonthData()">删除所选年月数据</button>
         </div>
 
         <div class="split"></div>
@@ -188,7 +188,7 @@
             </select>
             <input type="date" id="logDateFilter" placeholder="选择日期">
             <button class="btn" onclick="loadLogList()">查询日志</button>
-            <button class="btn btn-danger" onclick="clearLog()">清空日志</button>
+            <button class="btn btn-danger" onclick="clearAllLog()">清空全部日志</button>
         </div>
         <div>
             <table>
@@ -197,11 +197,11 @@
                         <th>操作时间</th>
                         <th>操作人</th>
                         <th>操作类型</th>
-                        <th>操作说明</th>
-                        <th>明细</th>
+                        <th>操作详情</th>
+                        <th>次数明细</th>
                     </tr>
                 </thead>
-                <tbody id="logTableBody"></tbody>
+                <tbody id="logTable"></tbody>
             </table>
         </div>
     </div>
@@ -218,642 +218,596 @@ let adminUsername = "";
 let adminPwd = "";
 let ALL_WORK_DATA = {};
 
-// 全局：强制从云端拉取最新工作项
-async function loadBaseData() {
-  try {
-    const res = await fetch(`${API_BASE}/api/getWorkList`);
-    const json = await res.json();
-    if (json.code === 0) {
-      WORK_LIST = json.list || [];
-    }
-  } catch (e) {
-    WORK_LIST = [];
-  }
-}
+const DEFAULT_TIME_MAP = {
+    "首件": 20,
+    "巡检": 20,
+    "入库": 10,
+    "出货": 10,
+    "外箱标": 10,
+    "内箱标": 10,
+    "特标": 10,
+    "工单打印": 10,
+    "核对物料": 10
+};
 
-// 全局：强制从云端拉取最新工时配置
-async function initTimeConfig() {
-  try {
-    const res = await fetch(`${API_BASE}/api/getTimeConfig`);
-    const json = await res.json();
-    WORK_TIME_MAP = json.data || {};
-  } catch (e) {
-    WORK_TIME_MAP = {};
-  }
-}
-
-// 手动刷新工作项
-async function refreshWorkList() {
-  await loadBaseData();
-  alert("已同步云端最新工作项");
-}
-
-// 时间格式化
+// 北京时间转换
 function formatChinaTime(timeStr) {
-  const date = new Date(timeStr);
-  const local = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-  const y = local.getFullYear();
-  const m = String(local.getMonth() + 1).padStart(2, '0');
-  const d = String(local.getDate()).padStart(2, '0');
-  const h = String(local.getHours()).padStart(2, '0');
-  const mi = String(local.getMinutes()).padStart(2, '0');
-  const s = String(local.getSeconds()).padStart(2, '0');
-  return `${y}-${m}-${d} ${h}:${mi}:${s}`;
+    const date = new Date(timeStr);
+    const localTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+    const year = localTime.getFullYear();
+    const month = String(localTime.getMonth() + 1).padStart(2, '0');
+    const day = String(localTime.getDate()).padStart(2, '0');
+    const h = String(localTime.getHours()).padStart(2, '0');
+    const m = String(localTime.getMinutes()).padStart(2, '0');
+    const s = String(localTime.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${h}:${m}:${s}`;
 }
 
-// 切换页面
 function showPage(pageId) {
-  document.querySelectorAll('.container > div').forEach(el => el.classList.add('hide'));
-  document.getElementById(pageId).classList.remove('hide');
+    document.querySelectorAll('.container > div').forEach(el => el.classList.add('hide'));
+    document.getElementById(pageId).classList.remove('hide');
 }
 
-// 切换登录面板
 function switchLogin(type) {
-  document.getElementById('staffLogin').classList.add('hide');
-  document.getElementById('adminLogin').classList.add('hide');
-  if (type === 'staff') {
-    document.getElementById('staffLogin').classList.remove('hide');
-  } else {
-    document.getElementById('adminLogin').classList.remove('hide');
-  }
-}
-
-// 退出登录：清空本地缓存
-function logout() {
-  currStaffId = "";
-  currStaffName = "";
-  adminUsername = "";
-  adminPwd = "";
-  STAFF_LIST = [];
-  WORK_LIST = [];
-  WORK_TIME_MAP = {};
-  ALL_WORK_DATA = {};
-  showPage('pageLogin');
-}
-
-// 初始化日期下拉框
-function initDateSelect() {
-  const now = new Date();
-  const currYear = now.getFullYear();
-  const currMonth = now.getMonth() + 1;
-  const currDay = now.getDate();
-
-  const yearSel = document.getElementById("selYear");
-  const monthSel = document.getElementById("selMonth");
-  const daySel = document.getElementById("selDay");
-  const delYearSel = document.getElementById("delYearSel");
-  const delMonthSel = document.getElementById("delMonthSel");
-  const queryYear = document.getElementById("queryYear");
-  const queryMonth = document.getElementById("queryMonth");
-
-  yearSel.innerHTML = "";
-  delYearSel.innerHTML = "";
-  queryYear.innerHTML = "";
-  for (let y = currYear - 5; y <= currYear + 2; y++) {
-    yearSel.innerHTML += `<option value="${y}">${y}</option>`;
-    delYearSel.innerHTML += `<option value="${y}">${y}</option>`;
-    queryYear.innerHTML += `<option value="${y}">${y}</option>`;
-  }
-
-  monthSel.innerHTML = "";
-  delMonthSel.innerHTML = "";
-  queryMonth.innerHTML = "";
-  for (let m = 1; m <= 12; m++) {
-    monthSel.innerHTML += `<option value="${m}">${m}</option>`;
-    delMonthSel.innerHTML += `<option value="${m}">${m}</option>`;
-    queryMonth.innerHTML += `<option value="${m}">${m}</option>`;
-  }
-
-  function fillDay(y, m) {
-    daySel.innerHTML = "";
-    const lastDay = new Date(y, m, 0).getDate();
-    for (let d = 1; d <= lastDay; d++) {
-      daySel.innerHTML += `<option value="${d}">${d}</option>`;
-    }
-  }
-
-  fillDay(currYear, currMonth);
-  yearSel.value = currYear;
-  monthSel.value = currMonth;
-  daySel.value = currDay;
-  delYearSel.value = currYear;
-  delMonthSel.value = currMonth;
-  queryYear.value = currYear;
-  queryMonth.value = currMonth;
-
-  yearSel.onchange = () => fillDay(+yearSel.value, +monthSel.value);
-  monthSel.onchange = () => fillDay(+yearSel.value, +monthSel.value);
-}
-
-// 员工登录：登录前先同步云端数据
-async function staffLogin() {
-  const name = document.getElementById('staffName').value.trim();
-  const pwd = document.getElementById('staffPwd').value.trim();
-  if (!name || !pwd) return alert("请输入姓名和密码");
-
-  // 登录强制拉取最新工作项+工时
-  await loadBaseData();
-  await initTimeConfig();
-
-  try {
-    const res = await fetch(`${API_BASE}/api/staff/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, pwd })
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      currStaffId = json.id;
-      currStaffName = json.name;
-      document.getElementById('currStaffName').innerText = currStaffName;
-      showPage('pageStaffDate');
+    document.getElementById('staffLogin').classList.add('hide');
+    document.getElementById('adminLogin').classList.add('hide');
+    if (type === 'staff') {
+        document.getElementById('staffLogin').classList.remove('hide');
     } else {
-      alert(json.msg || "登录失败");
+        document.getElementById('adminLogin').classList.remove('hide');
     }
-  } catch (e) {
-    alert("网络请求失败");
-  }
 }
 
-// 进入填写页：再次同步云端数据
+function logout() {
+    currStaffId = "";
+    currStaffName = "";
+    adminUsername = "";
+    adminPwd = "";
+    ALL_WORK_DATA = {};
+    showPage('pageLogin');
+}
+
+function initDateSelect() {
+    const now = new Date();
+    const currYear = now.getFullYear();
+    const currMonth = now.getMonth() + 1;
+    const currDay = now.getDate();
+
+    const yearSel = document.getElementById("selYear");
+    const monthSel = document.getElementById("selMonth");
+    const daySel = document.getElementById("selDay");
+    const delYearSel = document.getElementById("delYearSel");
+    const delMonthSel = document.getElementById("delMonthSel");
+    const queryYear = document.getElementById("queryYear");
+    const queryMonth = document.getElementById("queryMonth");
+
+    yearSel.innerHTML = "";
+    delYearSel.innerHTML = "";
+    queryYear.innerHTML = "";
+    for (let y = currYear - 5; y <= currYear + 2; y++) {
+        yearSel.innerHTML += `<option value="${y}">${y}</option>`;
+        delYearSel.innerHTML += `<option value="${y}">${y}</option>`;
+        queryYear.innerHTML += `<option value="${y}">${y}</option>`;
+    }
+
+    monthSel.innerHTML = "";
+    delMonthSel.innerHTML = "";
+    queryMonth.innerHTML = "";
+    for (let m = 1; m <= 12; m++) {
+        monthSel.innerHTML += `<option value="${m}">${m}</option>`;
+        delMonthSel.innerHTML += `<option value="${m}">${m}</option>`;
+        queryMonth.innerHTML += `<option value="${m}">${m}</option>`;
+    }
+
+    function fillDay(y, m) {
+        daySel.innerHTML = "";
+        const lastDay = new Date(y, m, 0).getDate();
+        for (let d = 1; d <= lastDay; d++) {
+            daySel.innerHTML += `<option value="${d}">${d}</option>`;
+        }
+    }
+
+    fillDay(currYear, currMonth);
+    yearSel.value = currYear;
+    monthSel.value = currMonth;
+    daySel.value = currDay;
+    delYearSel.value = currYear;
+    delMonthSel.value = currMonth;
+    queryYear.value = currYear;
+    queryMonth.value = currMonth;
+
+    yearSel.onchange = () => fillDay(+yearSel.value, +monthSel.value);
+    monthSel.onchange = () => fillDay(+yearSel.value, +monthSel.value);
+}
+
+async function loadBaseData() {
+    try {
+        const res = await fetch(`${API_BASE}/api/getWorkList`);
+        const json = await res.json();
+        if (json.code === 0) {
+            WORK_LIST = json.list || [];
+        }
+    } catch (e) {
+        WORK_LIST = ["首件", "巡检", "入库", "出货", "外箱标", "内箱标", "特标", "工单打印", "核对物料"];
+    }
+    WORK_TIME_MAP = {};
+    WORK_LIST.forEach(name => {
+        WORK_TIME_MAP[name] = DEFAULT_TIME_MAP[name] || 10;
+    });
+}
+
+async function staffLogin() {
+    const name = document.getElementById('staffName').value.trim();
+    const pwd = document.getElementById('staffPwd').value.trim();
+    if (!name || !pwd) return alert("请输入姓名和密码");
+
+    try {
+        const res = await fetch(`${API_BASE}/api/staff/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, pwd })
+        });
+        const json = await res.json();
+        if (json.code === 0) {
+            currStaffId = json.id;
+            currStaffName = json.name;
+            document.getElementById('currStaffName').innerText = currStaffName;
+            showPage('pageStaffDate');
+        } else {
+            alert(json.msg || "登录失败");
+        }
+    } catch (e) {
+        alert("网络请求失败");
+    }
+}
+
 async function goDetail() {
-  const y = document.getElementById('selYear').value;
-  const m = String(document.getElementById('selMonth').value).padStart(2, '0');
-  const d = String(document.getElementById('selDay').value).padStart(2, '0');
-  const dateStr = `${y}-${m}-${d}`;
+    const y = document.getElementById('selYear').value;
+    const m = String(document.getElementById('selMonth').value).padStart(2, '0');
+    const d = String(document.getElementById('selDay').value).padStart(2, '0');
+    const dateStr = `${y}-${m}-${d}`;
 
-  document.getElementById('detailStaffName').innerText = currStaffName;
-  document.getElementById('selectDateText').innerText = `${y}年${m}月${d}日`;
+    document.getElementById('detailStaffName').innerText = currStaffName;
+    document.getElementById('selectDateText').innerText = `${y}年${m}月${d}日`;
 
-  // 进入填写页强制刷新云端工作项
-  await loadBaseData();
+    let workArr = [];
+    try {
+        const res = await fetch(`${API_BASE}/api/getStaffWork/${currStaffId}`);
+        const json = await res.json();
+        workArr = json[dateStr] || [];
+    } catch (e) { }
 
-  let workArr = [];
-  try {
-    const res = await fetch(`${API_BASE}/api/getStaffWork/${currStaffId}`);
-    const json = await res.json();
-    workArr = json[dateStr] || [];
-  } catch (e) { }
-
-  const table = document.getElementById('detailTable');
-  table.innerHTML = "";
-  WORK_LIST.forEach((name, idx) => {
-    const count = Number(workArr[idx]) || 0;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${name}</td>
-      <td><input type="number" min="0" id="count_${idx}" value="${count}"></td>
-    `;
-    table.appendChild(tr);
-  });
-  showPage('pageStaffDetail');
+    const table = document.getElementById('detailTable');
+    table.innerHTML = "";
+    WORK_LIST.forEach((name, idx) => {
+        const count = Number(workArr[idx]) || 0;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${name}</td>
+            <td><input type="number" min="0" id="count_${idx}" value="${count}"></td>
+        `;
+        table.appendChild(tr);
+    });
+    showPage('pageStaffDetail');
 }
 
 function backToDate() {
-  showPage('pageStaffDate');
+    showPage('pageStaffDate');
 }
 
-// 保存员工填写数据
 async function saveStaffWork() {
-  const workArr = [];
-  WORK_LIST.forEach((_, idx) => {
-    workArr.push(Number(document.getElementById(`count_${idx}`).value) || 0);
-  });
-  const y = document.getElementById('selYear').value;
-  const m = String(document.getElementById('selMonth').value).padStart(2, '0');
-  const d = String(document.getElementById('selDay').value).padStart(2, '0');
-  const dateStr = `${y}-${m}-${d}`;
-
-  try {
-    const res = await fetch(`${API_BASE}/api/saveWorkData`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        staffId: currStaffId,
-        day: dateStr,
-        workArr: workArr,
-        staffName: currStaffName
-      })
+    const workArr = [];
+    WORK_LIST.forEach((_, idx) => {
+        workArr.push(Number(document.getElementById(`count_${idx}`).value) || 0);
     });
-    const json = await res.json();
-    alert(json.msg || "保存成功");
-  } catch (e) {
-    alert("保存失败");
-  }
-}
+    const y = document.getElementById('selYear').value;
+    const m = String(document.getElementById('selMonth').value).padStart(2, '0');
+    const d = String(document.getElementById('selDay').value).padStart(2, '0');
+    const dateStr = `${y}-${m}-${d}`;
 
-// 管理员登录：登录前同步云端数据
-async function adminLogin() {
-  const user = document.getElementById('adminUser').value.trim();
-  const pwd = document.getElementById('adminPwd').value.trim();
-  if (!user || !pwd) return alert("请输入账号密码");
-
-  // 管理员登录拉取最新配置
-  await loadBaseData();
-  await initTimeConfig();
-
-  try {
-    const res = await fetch(`${API_BASE}/api/admin/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: user, pwd })
+    let detailStr = "";
+    workArr.forEach((val, idx) => {
+        detailStr += `${WORK_LIST[idx] || "未知项"}:${val}次；`;
     });
-    const json = await res.json();
-    if (json.code === 0) {
-      adminUsername = user;
-      adminPwd = pwd;
-      showPage('pageAdmin');
-      await renderAdminPage();
-      refreshTotalTable();
-    } else {
-      alert(json.msg || "登录失败");
+
+    try {
+        const res = await fetch(`${API_BASE}/api/saveWorkData`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                staffId: currStaffId,
+                day: dateStr,
+                workArr: workArr,
+                staffName: currStaffName
+            })
+        });
+        const json = await res.json();
+        alert(json.msg || "保存成功");
+    } catch (e) {
+        alert("保存失败");
     }
-  } catch (e) {
-    alert("网络请求失败");
-  }
 }
 
-// 渲染管理员页面
+async function adminLogin() {
+    const user = document.getElementById('adminUser').value.trim();
+    const pwd = document.getElementById('adminPwd').value.trim();
+    if (!user || !pwd) return alert("请输入账号密码");
+
+    try {
+        const res = await fetch(`${API_BASE}/api/admin/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: user, pwd })
+        });
+        const json = await res.json();
+        if (json.code === 0) {
+            adminUsername = user;
+            adminPwd = pwd;
+            showPage('pageAdmin');
+            await renderAdminPage();
+            refreshTotalTable();
+        } else {
+            alert(json.msg || "登录失败");
+        }
+    } catch (e) {
+        alert("网络请求失败");
+    }
+}
+
 async function renderAdminPage() {
-  try {
-    const res = await fetch(`${API_BASE}/api/getAllData`);
-    const json = await res.json();
-    STAFF_LIST = json.staffList || [];
-    ALL_WORK_DATA = json.workData || {};
-  } catch (e) {
-    STAFF_LIST = [];
-    ALL_WORK_DATA = {};
-  }
+    try {
+        const res = await fetch(`${API_BASE}/api/getAllData`);
+        const json = await res.json();
+        STAFF_LIST = json.staffList || [];
+        ALL_WORK_DATA = json.workData || {};
+    } catch (e) {
+        STAFF_LIST = [];
+        ALL_WORK_DATA = {};
+    }
 
-  const staffSel = document.getElementById('delStaffSel');
-  const logSel = document.getElementById('logStaffSel');
-  const staffBox = document.getElementById('staffManageList');
-  staffSel.innerHTML = `<option value="">全部员工</option>`;
-  logSel.innerHTML = `<option value="">全部员工</option>`;
-  staffBox.innerHTML = "<h4>现有员工列表</h4>";
+    const staffSel = document.getElementById('delStaffSel');
+    const logSel = document.getElementById('logStaffSel');
+    const staffBox = document.getElementById('staffManageList');
+    staffSel.innerHTML = `<option value="">全部员工</option>`;
+    logSel.innerHTML = `<option value="">全部员工</option>`;
+    staffBox.innerHTML = "<h4>现有员工列表</h4>";
 
-  STAFF_LIST.forEach(staff => {
-    staffSel.innerHTML += `<option value="${staff.id}">${staff.name}</option>`;
-    logSel.innerHTML += `<option value="${staff.id}">${staff.name}</option>`;
-    const div = document.createElement('div');
-    div.innerHTML = `
-      姓名：${staff.name} &nbsp;&nbsp; 密码：${staff.pwd}
-      <input type="password" id="editPwd_${staff.id}" placeholder="新密码">
-      <button class="btn" onclick="updateStaffPwd('${staff.id}')">修改密码</button>
-      <button class="btn btn-danger" onclick="delStaff('${staff.id}')">删除</button>
-    `;
-    staffBox.appendChild(div);
-  });
+    STAFF_LIST.forEach(staff => {
+        staffSel.innerHTML += `<option value="${staff.id}">${staff.name}</option>`;
+        logSel.innerHTML += `<option value="${staff.id}">${staff.name}</option>`;
+        const div = document.createElement('div');
+        div.innerHTML = `
+            姓名：${staff.name} &nbsp;&nbsp; 密码：${staff.pwd}
+            <input type="password" id="editPwd_${staff.id}" placeholder="新密码">
+            <button class="btn" onclick="updateStaffPwd('${staff.id}')">修改密码</button>
+            <button class="btn btn-danger" onclick="delStaff('${staff.id}')">删除</button>
+        `;
+        staffBox.appendChild(div);
+    });
 }
 
-// 打开工作项编辑
 function goWorkEdit() {
-  showPage('pageWorkEdit');
-  const wrap = document.getElementById('workItemList');
-  wrap.innerHTML = "";
-  WORK_LIST.forEach((item) => {
+    showPage('pageWorkEdit');
+    renderWorkItemList();
+}
+function backToAdmin() {
+    showPage('pageAdmin');
+}
+function renderWorkItemList() {
+    const wrap = document.getElementById('workItemList');
+    wrap.innerHTML = "";
+    WORK_LIST.forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.className = "work-item-row";
+        div.innerHTML = `
+            <input type="text" value="${item}" data-idx="${idx}">
+            <button class="btn btn-danger" onclick="delWorkItem(this)">删除</button>
+        `;
+        wrap.appendChild(div);
+    });
+}
+function addWorkItem() {
+    const wrap = document.getElementById('workItemList');
     const div = document.createElement('div');
     div.className = "work-item-row";
     div.innerHTML = `
-      <input type="text" value="${item}">
-      <button class="btn btn-danger" onclick="delWorkItem(this)">删除</button>
+        <input type="text" placeholder="请输入工作内容">
+        <button class="btn btn-danger" onclick="delWorkItem(this)">删除</button>
     `;
     wrap.appendChild(div);
-  });
-}
-function backAdmin() {
-  showPage('pageAdmin');
-}
-function addWorkItem() {
-  const wrap = document.getElementById('workItemList');
-  const div = document.createElement('div');
-  div.className = "work-item-row";
-  div.innerHTML = `
-    <input type="text" placeholder="请输入工作内容">
-    <button class="btn btn-danger" onclick="delWorkItem(this)">删除</button>
-  `;
-  wrap.appendChild(div);
 }
 function delWorkItem(btn) {
-  btn.parentElement.remove();
+    btn.parentElement.remove();
 }
-
-// 保存工作项列表
-async function saveWorkItemList() {
-  const inputs = document.querySelectorAll(".work-item-row input");
-  const newList = [];
-  inputs.forEach(inp => {
-    const val = inp.value.trim();
-    if (val) newList.push(val);
-  });
-  if (newList.length === 0) return alert("工作项不能为空");
-
-  try {
-    const res = await fetch(`${API_BASE}/api/saveWorkList`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ list: newList })
+async function saveWorkList() {
+    const inputs = document.querySelectorAll(".work-item-row input");
+    const newList = [];
+    inputs.forEach(inp => {
+        const val = inp.value.trim();
+        if (val) newList.push(val);
     });
-    const json = await res.json();
-    if (json.code === 0) {
-      // 保存后本地同步最新数据
-      WORK_LIST = newList;
-      alert("保存成功");
-      backAdmin();
-    } else {
-      alert(json.msg);
+    if (newList.length === 0) return alert("工作项不能为空");
+
+    try {
+        const res = await fetch(`${API_BASE}/api/saveWorkList`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ list: newList })
+        });
+        const json = await res.json();
+        if (json.code === 0) {
+            WORK_LIST = newList;
+            WORK_TIME_MAP = {};
+            WORK_LIST.forEach(name => WORK_TIME_MAP[name] = DEFAULT_TIME_MAP[name] || 10);
+            alert("保存成功");
+            backToAdmin();
+        } else {
+            alert(json.msg);
+        }
+    } catch (e) {
+        alert("保存失败");
     }
-  } catch (e) {
-    alert("保存失败");
-  }
 }
 
-// 打开工时配置
-async function goTimeConfig() {
-  showPage('pageTimeConfig');
-  await initTimeConfig();
-  const wrap = document.getElementById('timeConfigWrap');
-  wrap.innerHTML = "";
-  WORK_LIST.forEach(name => {
-    const min = WORK_TIME_MAP[name] || 0;
-    const div = document.createElement('div');
-    div.className = "time-config-row";
-    div.innerHTML = `
-      <span style="width:120px;">${name}</span>
-      <input type="number" min="0" value="${min}" data-name="${name}">
-      <span>分钟/次</span>
-    `;
-    wrap.appendChild(div);
-  });
+function goTimeConfig() {
+    showPage('pageTimeConfig');
+    renderTimeConfig();
 }
-
-// 保存工时配置
-async function saveTimeConfig() {
-  const inputs = document.querySelectorAll(".time-config-row input");
-  const newConfig = {};
-  inputs.forEach(inp => {
-    const name = inp.dataset.name;
-    const val = Number(inp.value) || 0;
-    newConfig[name] = val;
-  });
-
-  try {
-    const res = await fetch(`${API_BASE}/api/saveTimeConfig`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newConfig)
-    });
-    const json = await res.json();
-    if(json.code === 0){
-      WORK_TIME_MAP = newConfig;
-      alert("工时配置保存成功");
-    }else{
-      alert(json.msg);
-    }
-    backAdmin();
-  } catch (e) {
-    alert("保存失败");
-    backAdmin();
-  }
-}
-
-// 新增员工
-async function addStaff() {
-  const name = document.getElementById('newStaffName').value.trim();
-  const pwd = document.getElementById('newStaffPwd').value.trim();
-  if (!name || !pwd) return alert("请填写姓名和密码");
-
-  try {
-    const res = await fetch(`${API_BASE}/api/addStaff`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, pwd })
-    });
-    const json = await res.json();
-    alert(json.msg);
-    if (json.code === 0) {
-      document.getElementById('newStaffName').value = "";
-      document.getElementById('newStaffPwd').value = "";
-      await renderAdminPage();
-      refreshTotalTable();
-    }
-  } catch (e) {
-    alert("请求失败");
-  }
-}
-
-// 删除员工
-async function delStaff(id) {
-  if (!confirm("确定删除该员工及所有数据？")) return;
-  try {
-    const res = await fetch(`${API_BASE}/api/delStaff/${id}`, { method: "DELETE" });
-    const json = await res.json();
-    alert(json.msg);
-    if (json.code === 0) {
-      await renderAdminPage();
-      refreshTotalTable();
-    }
-  } catch (e) {
-    alert("删除失败");
-  }
-}
-
-// 修改员工密码
-async function updateStaffPwd(staffId) {
-  const newPwd = document.getElementById(`editPwd_${staffId}`).value.trim();
-  if (!newPwd) return alert("请输入新密码");
-  if (newPwd.length < 3) return alert("密码长度不能少于3位");
-
-  try {
-    const res = await fetch(`${API_BASE}/api/admin/updateStaffPwd`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: adminUsername,
-        pwd: adminPwd,
-        staffId: staffId,
-        newPwd: newPwd
-      })
-    });
-    const json = await res.json();
-    alert(json.msg);
-    if (json.code === 0) await renderAdminPage();
-  } catch (e) {
-    alert("请求失败");
-  }
-}
-
-// 批量删除月度数据
-async function delMonthData() {
-  const staffId = document.getElementById('delStaffSel').value;
-  const y = document.getElementById('delYearSel').value;
-  const m = document.getElementById('delMonthSel').value;
-  if (!confirm("确定删除该月份数据？")) return;
-
-  try {
-    const res = await fetch(`${API_BASE}/api/admin/batchDeleteWork`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: adminUsername,
-        pwd: adminPwd,
-        staffId: staffId,
-        year: y,
-        month: m
-      })
-    });
-    const json = await res.json();
-    alert(json.msg);
-    if (json.code === 0) {
-      await renderAdminPage();
-      refreshTotalTable();
-    }
-  } catch (e) {
-    alert("删除失败");
-  }
-}
-
-// 修改管理员密码
-async function updateAdminPwd() {
-  const oldPwd = document.getElementById('oldAdminPwd').value.trim();
-  const newPwd = document.getElementById('newAdminPwd').value.trim();
-  const confirmPwd = document.getElementById('confirmAdminPwd').value.trim();
-  if (!oldPwd || !newPwd || !confirmPwd) return alert("请完整填写");
-  if (newPwd !== confirmPwd) return alert("两次新密码不一致");
-  if (newPwd.length < 3) return alert("密码长度不能少于3位");
-
-  try {
-    const res = await fetch(`${API_BASE}/api/updateAdminPwd`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ oldPwd, newPwd })
-    });
-    const json = await res.json();
-    alert(json.msg);
-    if (json.code === 0) logout();
-  } catch (e) {
-    alert("请求失败");
-  }
-}
-
-// 刷新工时汇总表格
-async function refreshTotalTable() {
-  try {
-    const res = await fetch(`${API_BASE}/api/getAllData`);
-    const json = await res.json();
-    STAFF_LIST = json.staffList || [];
-    ALL_WORK_DATA = json.workData || {};
-  } catch (e) {
-    return;
-  }
-
-  const qYear = document.getElementById('queryYear').value;
-  const qMonth = String(document.getElementById('queryMonth').value).padStart(2, '0');
-  const prefix = `${qYear}-${qMonth}`;
-  const lastDay = new Date(qYear, qMonth, 0).getDate();
-
-  const head = document.getElementById('totalTableHead');
-  const body = document.getElementById('totalTableBody');
-
-  let headHtml = `<tr><th>员工</th>`;
-  WORK_LIST.forEach(item => headHtml += `<th>${item}(小时)</th>`);
-  headHtml += `<th>合计(小时)</th></tr>`;
-  head.innerHTML = headHtml;
-
-  let bodyHtml = "";
-  STAFF_LIST.forEach(staff => {
-    const workData = ALL_WORK_DATA[staff.id] || {};
-    const totalMin = {};
-    WORK_LIST.forEach(name => totalMin[name] = 0);
-
-    for (let d = 1; d <= lastDay; d++) {
-      const dayStr = `${prefix}-${String(d).padStart(2, '0')}`;
-      const dayArr = workData[dayStr] || [];
-      dayArr.forEach((count, idx) => {
-        const name = WORK_LIST[idx];
-        totalMin[name] += count * (WORK_TIME_MAP[name] || 0);
-      });
-    }
-
-    let rowHtml = `<tr><td>${staff.name}</td>`;
-    let allTotal = 0;
+function renderTimeConfig() {
+    const wrap = document.getElementById('timeConfigWrap');
+    wrap.innerHTML = "";
     WORK_LIST.forEach(name => {
-      const hour = (totalMin[name] / 60).toFixed(2);
-      allTotal += totalMin[name];
-      rowHtml += `<td>${hour}</td>`;
+        const min = WORK_TIME_MAP[name] || 10;
+        const div = document.createElement('div');
+        div.className = "time-config-row";
+        div.innerHTML = `
+            <span style="width:100px;">${name}</span>
+            <input type="number" min="0" value="${min}" data-name="${name}">
+            <span>分钟/次</span>
+        `;
+        wrap.appendChild(div);
     });
-    const allHour = (allTotal / 60).toFixed(2);
-    rowHtml += `<td class="total-hour">${allHour}</td></tr>`;
-    bodyHtml += rowHtml;
-  });
-  body.innerHTML = bodyHtml;
+}
+function saveTimeConfig() {
+    const inputs = document.querySelectorAll(".time-config-row input");
+    inputs.forEach(inp => {
+        const name = inp.dataset.name;
+        const val = Number(inp.value) || 0;
+        WORK_TIME_MAP[name] = val;
+    });
+    alert("工时标准配置保存成功");
+    backToAdmin();
 }
 
-// 查询日志
-async function loadLogList() {
-  const staffId = document.getElementById('logStaffSel').value;
-  const date = document.getElementById('logDateFilter').value;
-  const logBox = document.getElementById('logTableBody');
+async function addStaff() {
+    const name = document.getElementById('newStaffName').value.trim();
+    const pwd = document.getElementById('newStaffPwd').value.trim();
+    if (!name || !pwd) return alert("请填写姓名和密码");
 
-  try {
-    const res = await fetch(`${API_BASE}/api/admin/getLog`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: adminUsername,
-        pwd: adminPwd,
-        filterStaffId: staffId,
-        filterDate: date
-      })
-    });
-    const json = await res.json();
-    if (json.code !== 0) {
-      logBox.innerHTML = `<tr><td colspan="5" style="text-align:center;">${json.msg}</td></tr>`;
-      return;
+    try {
+        const res = await fetch(`${API_BASE}/api/addStaff`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, pwd })
+        });
+        const json = await res.json();
+        alert(json.msg);
+        if (json.code === 0) {
+            document.getElementById('newStaffName').value = "";
+            document.getElementById('newStaffPwd').value = "";
+            await renderAdminPage();
+            refreshTotalTable();
+        }
+    } catch (e) {
+        alert("请求失败");
     }
-    const logList = json.data || [];
-    let html = "";
-    logList.forEach(item => {
-      const time = formatChinaTime(item.time);
-      let detail = item.workDetail || "";
-      detail = detail.replace(/工时/g, "次");
-      html += `
-        <tr>
-          <td>${time}</td>
-          <td>${item.operator}</td>
-          <td>${item.type}</td>
-          <td>${item.content}</td>
-          <td>${detail}</td>
-        </tr>`;
-    });
-    logBox.innerHTML = html || `<tr><td colspan="5" style="text-align:center;">暂无日志</td></tr>`;
-  } catch (e) {
-    logBox.innerHTML = `<tr><td colspan="5" style="text-align:center;">请求异常</td></tr>`;
-  }
 }
 
-// 清空日志
-async function clearLog() {
-  if(!confirm("确定清空所有日志？")) return;
-  try {
-    const res = await fetch(`${API_BASE}/api/admin/clearLog`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: adminUsername,
-        pwd: adminPwd
-      })
-    });
-    const json = await res.json();
-    alert(json.msg);
-    loadLogList();
-  } catch (e) {
-    alert("操作失败");
-  }
+async function delStaff(id) {
+    if (!confirm("确定删除该员工？关联数据一并清除")) return;
+    try {
+        const res = await fetch(`${API_BASE}/api/delStaff/${id}`, {
+            method: "DELETE"
+        });
+        const json = await res.json();
+        alert(json.msg);
+        if (json.code === 0) {
+            await renderAdminPage();
+            refreshTotalTable();
+        }
+    } catch (e) {
+        alert("请求失败");
+    }
 }
 
-// 页面初始化
-window.onload = function(){
-  initDateSelect();
+async function updateStaffPwd(staffId) {
+    const newPwd = document.getElementById(`editPwd_${staffId}`).value.trim();
+    if (!newPwd) return alert("请输入新密码");
+    if (newPwd.length < 3) return alert("密码长度不能小于3位");
+
+    try {
+        const res = await fetch(`${API_BASE}/api/admin/updateStaffPwd`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: adminUsername,
+                pwd: adminPwd,
+                staffId: staffId,
+                newPwd: newPwd
+            })
+        });
+        const json = await res.json();
+        alert(json.msg);
+        if (json.code === 0) await renderAdminPage();
+    } catch (e) {
+        alert("请求失败");
+    }
 }
+
+async function delMonthData() {
+    const staffId = document.getElementById('delStaffSel').value;
+    const y = document.getElementById('delYearSel').value;
+    const m = document.getElementById('delMonthSel').value;
+    if (!confirm("确定删除该月份数据？")) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/admin/batchDeleteWork`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: adminUsername,
+                pwd: adminPwd,
+                staffId: staffId,
+                year: y,
+                month: m
+            })
+        });
+        const json = await res.json();
+        alert(json.msg);
+        if (json.code === 0) {
+            await renderAdminPage();
+            refreshTotalTable();
+        }
+    } catch (e) {
+        alert("请求失败");
+    }
+}
+
+async function updateAdminPwd() {
+    const oldPwd = document.getElementById('oldAdminPwd').value.trim();
+    const newPwd = document.getElementById('newAdminPwd').value.trim();
+    const confirmPwd = document.getElementById('confirmAdminPwd').value.trim();
+    if (!oldPwd || !newPwd || !confirmPwd) return alert("请完整填写");
+    if (newPwd !== confirmPwd) return alert("两次新密码不一致");
+    if (newPwd.length < 3) return alert("密码长度不能小于3位");
+
+    try {
+        const res = await fetch(`${API_BASE}/api/updateAdminPwd`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ oldPwd, newPwd })
+        });
+        const json = await res.json();
+        alert(json.msg);
+        if (json.code === 0) logout();
+    } catch (e) {
+        alert("请求失败");
+    }
+}
+
+// 核心：适配后端 workData 结构 + 日期补零匹配
+function refreshTotalTable() {
+    const qYear = document.getElementById('queryYear').value;
+    const qMonth = document.getElementById('queryMonth').value;
+    const prefix = `${qYear}-${String(qMonth).padStart(2, '0')}`;
+    const lastDay = new Date(qYear, qMonth, 0).getDate();
+
+    const head = document.getElementById('totalTableHead');
+    const body = document.getElementById('totalTableBody');
+
+    let headHtml = `<tr><th>人员</th>`;
+    WORK_LIST.forEach(item => headHtml += `<th>${item}(小时)</th>`);
+    headHtml += `<th>月度合计(小时)</th></tr>`;
+    head.innerHTML = headHtml;
+
+    let allRows = "";
+    STAFF_LIST.forEach(staff => {
+        const userWork = ALL_WORK_DATA[staff.id] || {};
+        let monthTotalMin = 0;
+        const itemHourArr = WORK_LIST.map(() => 0);
+
+        for (let d = 1; d <= lastDay; d++) {
+            const dayStr = `${prefix}-${String(d).padStart(2, '0')}`;
+            const countArr = userWork[dayStr] || [];
+            countArr.forEach((count, idx) => {
+                const name = WORK_LIST[idx];
+                const onceMin = WORK_TIME_MAP[name] || 10;
+                const dayMin = count * onceMin;
+                monthTotalMin += dayMin;
+                itemHourArr[idx] += dayMin / 60;
+            });
+        }
+
+        let trHtml = `<td>${staff.name}</td>`;
+        itemHourArr.forEach(h => trHtml += `<td>${h.toFixed(2)}</td>`);
+        const totalHour = (monthTotalMin / 60).toFixed(2);
+        trHtml += `<td class="total-hour">${totalHour}</td>`;
+        allRows += `<tr>${trHtml}</tr>`;
+    });
+    body.innerHTML = allRows;
+}
+
+async function loadLogList() {
+    const filterStaffId = document.getElementById('logStaffSel').value;
+    const filterDate = document.getElementById('logDateFilter').value;
+    const logTable = document.getElementById('logTable');
+
+    try {
+        const res = await fetch(`${API_BASE}/api/admin/getLog`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: adminUsername,
+                pwd: adminPwd,
+                filterStaffId: filterStaffId,
+                filterDate: filterDate
+            })
+        });
+        const json = await res.json();
+        if (json.code !== 0) {
+            logTable.innerHTML = `<tr><td colspan="5" style="text-align:center;">获取日志失败</td></tr>`;
+            return;
+        }
+        const logList = json.data || [];
+        logTable.innerHTML = "";
+        if (logList.length === 0) {
+            logTable.innerHTML = `<tr><td colspan="5" style="text-align:center;">暂无日志</td></tr>`;
+            return;
+        }
+        let html = "";
+        logList.forEach(log => {
+            const fmtTime = formatChinaTime(log.time);
+            let detail = log.workDetail || "";
+            detail = detail.replace(/工时/g, "次");
+            html += `
+            <tr>
+                <td>${fmtTime}</td>
+                <td>${log.operator}</td>
+                <td>${log.type}</td>
+                <td>${log.content}</td>
+                <td>${detail}</td>
+            </tr>`;
+        });
+        logTable.innerHTML = html;
+    } catch (e) {
+        logTable.innerHTML = `<tr><td colspan="5" style="text-align:center;">请求异常</td></tr>`;
+    }
+}
+
+async function clearAllLog() {
+    if (!confirm("确定清空全部日志？不可恢复！")) return;
+    try {
+        const res = await fetch(`${API_BASE}/api/admin/clearLog`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: adminUsername, pwd: adminPwd })
+        });
+        const json = await res.json();
+        alert(json.msg);
+        loadLogList();
+    } catch (e) {
+        alert("请求失败");
+    }
+}
+
+document.addEventListener('DOMContentLoaded', async function () {
+    document.getElementById('btnStaffLogin').addEventListener('click', staffLogin);
+    document.getElementById('btnAdminLogin').addEventListener('click', adminLogin);
+
+    initDateSelect();
+    await loadBaseData();
+    showPage('pageLogin');
+});
 </script>
+</body>
+</html>
