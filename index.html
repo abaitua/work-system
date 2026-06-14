@@ -181,7 +181,7 @@
         </table>
 
         <div class="split"></div>
-        <h3>三、系统操作日志（UTC+8 北京时间）</h3>
+        <h3>三、系统操作日志（北京时间）</h3>
         <div class="select-row" style="margin:6px 0;">
             <select id="logStaffSel">
                 <option value="">全部员工</option>
@@ -208,7 +208,6 @@
 </div>
 
 <script>
-// 全局变量
 let API_BASE = "";
 let STAFF_LIST = [];
 let WORK_LIST = [];
@@ -217,8 +216,8 @@ let currStaffId = "";
 let currStaffName = "";
 let adminUsername = "";
 let adminPwd = "";
+let allStaffWorkData = {};
 
-// 初始化默认工时配置
 const DEFAULT_TIME_MAP = {
     "首件": 20,
     "巡检": 20,
@@ -231,27 +230,25 @@ const DEFAULT_TIME_MAP = {
     "核对物料": 10
 };
 
-// ===================== 公共方法 =====================
-// UTC+8 北京时间格式化
-function formatChinaTime(utcStr) {
-    if(!utcStr) return "";
-    const d = new Date(utcStr);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const h = String(d.getHours()).padStart(2, '0');
-    const m = String(d.getMinutes()).padStart(2, '0');
-    const s = String(d.getSeconds()).padStart(2, '0');
+// 统一转为北京时间 UTC+8
+function formatChinaTime(timeStr) {
+    const date = new Date(timeStr);
+    // 时区偏移修正 +8小时
+    const localTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+    const year = localTime.getFullYear();
+    const month = String(localTime.getMonth() + 1).padStart(2, '0');
+    const day = String(localTime.getDate()).padStart(2, '0');
+    const h = String(localTime.getHours()).padStart(2, '0');
+    const m = String(localTime.getMinutes()).padStart(2, '0');
+    const s = String(localTime.getSeconds()).padStart(2, '0');
     return `${year}-${month}-${day} ${h}:${m}:${s}`;
 }
 
-// 页面切换
 function showPage(pageId) {
     document.querySelectorAll('.container > div').forEach(el => el.classList.add('hide'));
     document.getElementById(pageId).classList.remove('hide');
 }
 
-// 登录面板切换
 function switchLogin(type) {
     document.getElementById('staffLogin').classList.add('hide');
     document.getElementById('adminLogin').classList.add('hide');
@@ -262,16 +259,15 @@ function switchLogin(type) {
     }
 }
 
-// 退出登录
 function logout() {
     currStaffId = "";
     currStaffName = "";
     adminUsername = "";
     adminPwd = "";
+    allStaffWorkData = {};
     showPage('pageLogin');
 }
 
-// 初始化日期下拉框
 function initDateSelect() {
     const now = new Date();
     const currYear = now.getFullYear();
@@ -325,7 +321,6 @@ function initDateSelect() {
     monthSel.onchange = () => fillDay(+yearSel.value, +monthSel.value);
 }
 
-// ===================== 加载基础数据 =====================
 async function loadBaseData() {
     try {
         const res = await fetch(`${API_BASE}/api/getWorkList`);
@@ -336,14 +331,12 @@ async function loadBaseData() {
     } catch (e) {
         WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
     }
-    // 初始化工时标准
     WORK_TIME_MAP = {};
     WORK_LIST.forEach(name => {
         WORK_TIME_MAP[name] = DEFAULT_TIME_MAP[name] || 10;
     });
 }
 
-// ===================== 员工登录 & 填写页面 =====================
 async function staffLogin() {
     const name = document.getElementById('staffName').value.trim();
     const pwd = document.getElementById('staffPwd').value.trim();
@@ -378,7 +371,6 @@ async function goDetail() {
     document.getElementById('detailStaffName').innerText = currStaffName;
     document.getElementById('selectDateText').innerText = `${y}年${m}月${d}日`;
 
-    // 获取当日次数数据
     let workArr = [];
     try {
         const res = await fetch(`${API_BASE}/api/getStaffWork/${currStaffId}`);
@@ -386,7 +378,6 @@ async function goDetail() {
         workArr = json[dateStr] || [];
     } catch (e) {}
 
-    // 仅渲染 工作内容 + 填写次数
     const table = document.getElementById('detailTable');
     table.innerHTML = "";
     WORK_LIST.forEach((name, idx) => {
@@ -394,30 +385,17 @@ async function goDetail() {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${name}</td>
-            <td><input type="number" min="0" id="count_${idx}" value="${count}" oninput="calcDayTotal()"></td>
+            <td><input type="number" min="0" id="count_${idx}" value="${count}"></td>
         `;
         table.appendChild(tr);
     });
-    calcDayTotal();
     showPage('pageStaffDetail');
-}
-
-// 实时计算当日总工时（后台逻辑保留，前端不展示）
-function calcDayTotal(){
-    let totalMin = 0;
-    WORK_LIST.forEach((name, idx) => {
-        const count = Number(document.getElementById(`count_${idx}`).value) || 0;
-        const onceMin = WORK_TIME_MAP[name] || 10;
-        const itemMin = count * onceMin;
-        totalMin += itemMin;
-    });
 }
 
 function backToDate() {
     showPage('pageStaffDate');
 }
 
-// 保存员工填写的次数
 async function saveStaffWork() {
     const workArr = [];
     WORK_LIST.forEach((_, idx) => {
@@ -428,7 +406,6 @@ async function saveStaffWork() {
     const d = String(document.getElementById('selDay').value).padStart(2, '0');
     const dateStr = `${y}-${m}-${d}`;
 
-    // 组装次数明细（替换为“次”）
     let detailStr = "";
     workArr.forEach((val, idx) => {
         detailStr += `${WORK_LIST[idx] || "未知项"}:${val}次；`;
@@ -452,7 +429,6 @@ async function saveStaffWork() {
     }
 }
 
-// ===================== 管理员登录 =====================
 async function adminLogin() {
     const user = document.getElementById('adminUser').value.trim();
     const pwd = document.getElementById('adminPwd').value.trim();
@@ -468,9 +444,9 @@ async function adminLogin() {
         if(json.code === 0){
             adminUsername = user;
             adminPwd = pwd;
-            await renderAdminPage();   // 加载员工+缓存所有工时
-            refreshTotalTable();       // 👈 自动渲染当月汇总（关键这行）
             showPage('pageAdmin');
+            await renderAdminPage();
+            refreshTotalTable();
         }else{
             alert(json.msg || "登录失败");
         }
@@ -479,14 +455,15 @@ async function adminLogin() {
     }
 }
 
-// 渲染管理员主页 + 员工列表
 async function renderAdminPage() {
     try {
         const res = await fetch(`${API_BASE}/api/getAllData`);
         const json = await res.json();
         STAFF_LIST = json.staffList || [];
+        allStaffWorkData = json.allWorkData || {};
     } catch (e) {
         STAFF_LIST = [];
+        allStaffWorkData = {};
     }
 
     const staffSel = document.getElementById('delStaffSel');
@@ -508,12 +485,8 @@ async function renderAdminPage() {
         `;
         staffBox.appendChild(div);
     });
-
-    // 清空表格，等待手动查询
-    document.getElementById('totalTableBody').innerHTML = "";
 }
 
-// ===================== 工作项编辑 =====================
 function goWorkEdit() {
     showPage('pageWorkEdit');
     renderWorkItemList();
@@ -579,7 +552,6 @@ async function saveWorkList() {
     }
 }
 
-// ===================== 工时标准配置 =====================
 function goTimeConfig() {
     showPage('pageTimeConfig');
     renderTimeConfig();
@@ -610,7 +582,6 @@ function saveTimeConfig() {
     backToAdmin();
 }
 
-// ===================== 员工管理接口 =====================
 async function addStaff() {
     const name = document.getElementById('newStaffName').value.trim();
     const pwd = document.getElementById('newStaffPwd').value.trim();
@@ -628,6 +599,7 @@ async function addStaff() {
             document.getElementById('newStaffName').value = "";
             document.getElementById('newStaffPwd').value = "";
             await renderAdminPage();
+            refreshTotalTable();
         }
     } catch (e) {
         alert("请求失败");
@@ -642,7 +614,10 @@ async function delStaff(id) {
         });
         const json = await res.json();
         alert(json.msg);
-        if(json.code === 0) await renderAdminPage();
+        if(json.code === 0) {
+            await renderAdminPage();
+            refreshTotalTable();
+        }
     } catch (e) {
         alert("请求失败");
     }
@@ -672,7 +647,6 @@ async function updateStaffPwd(staffId) {
     }
 }
 
-// ===================== 数据清理 =====================
 async function delMonthData() {
     const staffId = document.getElementById('delStaffSel').value;
     const y = document.getElementById('delYearSel').value;
@@ -693,13 +667,15 @@ async function delMonthData() {
         });
         const json = await res.json();
         alert(json.msg);
-        if(json.code === 0) await renderAdminPage();
+        if(json.code === 0) {
+            await renderAdminPage();
+            refreshTotalTable();
+        }
     } catch (e) {
         alert("请求失败");
     }
 }
 
-// ===================== 管理员改密码 =====================
 async function updateAdminPwd() {
     const oldPwd = document.getElementById('oldAdminPwd').value.trim();
     const newPwd = document.getElementById('newAdminPwd').value.trim();
@@ -722,11 +698,11 @@ async function updateAdminPwd() {
     }
 }
 
-// ===================== 月度工时汇总（一次性渲染） =====================
-async function refreshTotalTable() {
+function refreshTotalTable() {
     const qYear = document.getElementById('queryYear').value;
     const qMonth = document.getElementById('queryMonth').value;
     const prefix = `${qYear}-${String(qMonth).padStart(2, '0')}`;
+    const lastDay = new Date(qYear, qMonth, 0).getDate();
 
     const head = document.getElementById('totalTableHead');
     const body = document.getElementById('totalTableBody');
@@ -736,40 +712,34 @@ async function refreshTotalTable() {
     headHtml += `<th>月度合计(小时)</th></tr>`;
     head.innerHTML = headHtml;
 
-    // 统一收集所有行HTML，一次性插入
     let allRows = "";
-    const lastDay = new Date(qYear, qMonth, 0).getDate();
-
-    for(let staff of STAFF_LIST){
+    STAFF_LIST.forEach(staff => {
+        const workData = allStaffWorkData[staff.id] || {};
         let monthTotalMin = 0;
         const itemHourArr = WORK_LIST.map(()=>0);
-        try {
-            const res = await fetch(`${API_BASE}/api/getStaffWork/${staff.id}`);
-            const workData = await res.json();
-            for(let d = 1; d <= lastDay; d++){
-                const dayStr = `${prefix}-${String(d).padStart(2, '0')}`;
-                const countArr = workData[dayStr] || [];
-                countArr.forEach((count, idx) => {
-                    const name = WORK_LIST[idx];
-                    const onceMin = WORK_TIME_MAP[name] || 10;
-                    const dayMin = count * onceMin;
-                    monthTotalMin += dayMin;
-                    itemHourArr[idx] += dayMin / 60;
-                });
-            }
-        } catch (e) {}
+
+        for(let d = 1; d <= lastDay; d++){
+            const dayStr = `${prefix}-${String(d).padStart(2, '0')}`;
+            const countArr = workData[dayStr] || [];
+            countArr.forEach((count, idx) => {
+                const name = WORK_LIST[idx];
+                const onceMin = WORK_TIME_MAP[name] || 10;
+                const dayMin = count * onceMin;
+                monthTotalMin += dayMin;
+                itemHourArr[idx] += dayMin / 60;
+            });
+        }
 
         let trHtml = `<td>${staff.name}</td>`;
         itemHourArr.forEach(h => trHtml += `<td>${h.toFixed(2)}</td>`);
         const totalHour = (monthTotalMin / 60).toFixed(2);
         trHtml += `<td class="total-hour">${totalHour}</td>`;
         allRows += `<tr>${trHtml}</tr>`;
-    }
-    // 一次性渲染全部数据
+    });
+
     body.innerHTML = allRows;
 }
 
-// ===================== 日志功能 =====================
 async function loadLogList() {
     const filterStaffId = document.getElementById('logStaffSel').value;
     const filterDate = document.getElementById('logDateFilter').value;
@@ -797,17 +767,24 @@ async function loadLogList() {
             logTable.innerHTML = `<tr><td colspan="5" style="text-align:center;">暂无日志</td></tr>`;
             return;
         }
+        let html = "";
         logList.forEach(log => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${formatChinaTime(log.time)}</td>
+            // 时间转北京时间
+            const fmtTime = formatChinaTime(log.time);
+            // 全局替换 工时 → 次
+            let workDetail = log.workDetail || "";
+            workDetail = workDetail.replace(/工时/g, "次");
+
+            html += `
+            <tr>
+                <td>${fmtTime}</td>
                 <td>${log.operator}</td>
                 <td>${log.type}</td>
                 <td>${log.content}</td>
-                <td>${log.workDetail || "-"}</td>
-            `;
-            logTable.appendChild(tr);
+                <td>${workDetail}</td>
+            </tr>`;
         });
+        logTable.innerHTML = html;
     } catch (e) {
         logTable.innerHTML = `<tr><td colspan="5" style="text-align:center;">请求异常</td></tr>`;
     }
@@ -829,9 +806,7 @@ async function clearAllLog() {
     }
 }
 
-// ===================== 页面入口初始化 =====================
 document.addEventListener('DOMContentLoaded', async function(){
-    // 绑定按钮事件
     document.getElementById('btnStaffLogin').addEventListener('click', staffLogin);
     document.getElementById('btnAdminLogin').addEventListener('click', adminLogin);
 
