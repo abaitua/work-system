@@ -90,23 +90,28 @@ async function writeData(data) {
   console.log("DATA_KEY写入完成");
 }
 
-// 工作项列表（加详细日志）
+// 工作项列表（修复解析异常，兼容逗号分隔旧数据）
 async function readWorkList() {
   const redis = getRedis();
   if (!redis) return DEFAULT_WORK_LIST;
   let raw = await redis.get(WORK_LIST_KEY);
   console.log("readWorkList 读取原始raw：", raw);
+
   if (!raw) {
     console.log("WORK_LIST_KEY为空，执行初始化");
     return await initDefaultWorkList();
   }
+
+  // 优先标准JSON解析
   try {
     const parseData = JSON.parse(raw);
     console.log("readWorkList 解析结果：", parseData);
     return parseData;
   } catch (e) {
-    console.error("解析WORK_LIST失败", e);
-    return DEFAULT_WORK_LIST;
+    console.log("非JSON格式，按逗号分割兼容处理");
+    // 分割、去空格、过滤空项
+    const tempArr = raw.split(',').map(item => item.trim()).filter(item => item);
+    return tempArr.length > 0 ? tempArr : DEFAULT_WORK_LIST;
   }
 }
 async function writeWorkList(list) {
