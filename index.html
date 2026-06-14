@@ -94,9 +94,7 @@
             <thead>
                 <tr>
                     <th>工作内容</th>
-                    <th>单次标准(分钟)</th>
                     <th>填写次数</th>
-                    <th>本次时长(分钟)</th>
                 </tr>
             </thead>
             <tbody id="detailTable"></tbody>
@@ -171,7 +169,6 @@
             <span>查询月份：</span>
             <select id="queryYear"></select>
             <select id="queryMonth"></select>
-            <button class="btn" onclick="refreshTotalTable()">查询</button>
         </div>
         <table>
             <thead id="totalTableHead">
@@ -200,7 +197,7 @@
                         <th>操作人</th>
                         <th>操作类型</th>
                         <th>操作详情</th>
-                        <th>工时明细</th>
+                        <th>次数明细</th>
                     </tr>
                 </thead>
                 <tbody id="logTable"></tbody>
@@ -388,19 +385,15 @@ async function goDetail() {
         workArr = json[dateStr] || [];
     } catch (e) {}
 
-    // 渲染表格
+    // 仅渲染 工作内容 + 填写次数
     const table = document.getElementById('detailTable');
     table.innerHTML = "";
     WORK_LIST.forEach((name, idx) => {
-        const onceMin = WORK_TIME_MAP[name] || 10;
         const count = Number(workArr[idx]) || 0;
-        const totalMin = count * onceMin;
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${name}</td>
-            <td>${onceMin}</td>
             <td><input type="number" min="0" id="count_${idx}" value="${count}" oninput="calcDayTotal()"></td>
-            <td id="min_${idx}">${totalMin}</td>
         `;
         table.appendChild(tr);
     });
@@ -408,14 +401,13 @@ async function goDetail() {
     showPage('pageStaffDetail');
 }
 
-// 实时计算当日总工时
+// 实时计算当日总工时（后台逻辑保留，仅前端隐藏字段）
 function calcDayTotal(){
     let totalMin = 0;
     WORK_LIST.forEach((name, idx) => {
         const count = Number(document.getElementById(`count_${idx}`).value) || 0;
         const onceMin = WORK_TIME_MAP[name] || 10;
         const itemMin = count * onceMin;
-        document.getElementById(`min_${idx}`).innerText = itemMin;
         totalMin += itemMin;
     });
     const totalHour = (totalMin / 60).toFixed(2);
@@ -436,6 +428,12 @@ async function saveStaffWork() {
     const m = String(document.getElementById('selMonth').value).padStart(2, '0');
     const d = String(document.getElementById('selDay').value).padStart(2, '0');
     const dateStr = `${y}-${m}-${d}`;
+
+    // 组装次数明细（替换为“次”）
+    let detailStr = "";
+    workArr.forEach((val, idx) => {
+        detailStr += `${WORK_LIST[idx] || "未知项"}:${val}次；`;
+    });
 
     try {
         const res = await fetch(`${API_BASE}/api/saveWorkData`, {
@@ -481,7 +479,7 @@ async function adminLogin() {
     }
 }
 
-// 渲染管理员主页 + 员工列表
+// 渲染管理员主页 + 员工列表 + 自动加载工时统计
 async function renderAdminPage() {
     try {
         const res = await fetch(`${API_BASE}/api/getAllData`);
@@ -510,6 +508,9 @@ async function renderAdminPage() {
         `;
         staffBox.appendChild(div);
     });
+
+    // 进入页面自动加载工时汇总
+    await refreshTotalTable();
 }
 
 // ===================== 工作项编辑 =====================
