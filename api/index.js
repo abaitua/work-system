@@ -11,13 +11,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// 适配Vercel KV现有环境变量
 function getRedis() {
   try {
-    const redis = new Redis({
-      url: process.env.KV_REST_API_URL,
-      token: process.env.KV_REST_API_TOKEN
-    });
+    const redis = Redis.fromEnv();
     console.log("Redis 连接成功");
     return redis;
   } catch (err) {
@@ -25,7 +21,6 @@ function getRedis() {
     return null;
   }
 }
-
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..')));
 
