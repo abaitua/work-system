@@ -16,8 +16,8 @@ app.use(express.static(path.join(__dirname, '..')));
 const DATA_KEY = "work_system_data";
 const LOG_KEY = "work_system_log";
 const WORK_LIST_KEY = "work_system_worklist";
+const TIME_CONFIG_KEY = "work_system_time_config";
 
-// 默认数据
 const DEFAULT_DATA = {
   admin: { username: "admin", pwd: "123456" },
   staffList: [],
@@ -25,59 +25,92 @@ const DEFAULT_DATA = {
 };
 const DEFAULT_LOG = [];
 const DEFAULT_WORK_LIST = ["首件","巡检","入库","出货","外箱标","内箱标","特标","工单打印","核对物料"];
+const DEFAULT_TIME_CONFIG = {
+  "首件": 20,
+  "巡检": 20,
+  "入库": 10,
+  "出货": 10,
+  "外箱标": 10,
+  "内箱标": 10,
+  "特标": 10,
+  "工单打印": 10,
+  "核对物料": 10
+};
 
-// 初始化数据
+// 初始化
 async function initDefaultData() {
   if (!redis) return DEFAULT_DATA;
-  await redis.set(DATA_KEY, DEFAULT_DATA);
+  await redis.set(DATA_KEY, JSON.stringify(DEFAULT_DATA));
   return DEFAULT_DATA;
 }
 async function initDefaultWorkList() {
   if (!redis) return DEFAULT_WORK_LIST;
-  await redis.set(WORK_LIST_KEY, DEFAULT_WORK_LIST);
+  await redis.set(WORK_LIST_KEY, JSON.stringify(DEFAULT_WORK_LIST));
   return DEFAULT_WORK_LIST;
 }
+async function initDefaultTimeConfig() {
+  if (!redis) return DEFAULT_TIME_CONFIG;
+  await redis.set(TIME_CONFIG_KEY, JSON.stringify(DEFAULT_TIME_CONFIG));
+  return DEFAULT_TIME_CONFIG;
+}
 
-// 读写主数据
+// 主数据读写
 async function readData() {
   if (!redis) return DEFAULT_DATA;
-  let data = await redis.get(DATA_KEY);
-  return data || await initDefaultData();
+  let raw = await redis.get(DATA_KEY);
+  if (!raw) return await initDefaultData();
+  try { return JSON.parse(raw); } catch { return DEFAULT_DATA; }
 }
 async function writeData(data) {
   if (!redis) return;
-  await redis.set(DATA_KEY, data);
+  const copy = JSON.parse(JSON.stringify(data));
+  await redis.set(DATA_KEY, JSON.stringify(copy));
 }
 
-// 读写工作项列表
+// 工作项列表
 async function readWorkList() {
   if (!redis) return DEFAULT_WORK_LIST;
-  let list = await redis.get(WORK_LIST_KEY);
-  return list || await initDefaultWorkList();
+  let raw = await redis.get(WORK_LIST_KEY);
+  if (!raw) return await initDefaultWorkList();
+  try { return JSON.parse(raw); } catch { return DEFAULT_WORK_LIST; }
 }
 async function writeWorkList(list) {
   if (!redis) return;
-  await redis.set(WORK_LIST_KEY, list);
+  await redis.set(WORK_LIST_KEY, JSON.stringify(list));
 }
 
-// 日志读写
+// 工时配置
+async function readTimeConfig() {
+  if (!redis) return DEFAULT_TIME_CONFIG;
+  let raw = await redis.get(TIME_CONFIG_KEY);
+  if (!raw) return await initDefaultTimeConfig();
+  try { return JSON.parse(raw); } catch { return DEFAULT_TIME_CONFIG; }
+}
+async function writeTimeConfig(config) {
+  if (!redis) return;
+  await redis.set(TIME_CONFIG_KEY, JSON.stringify(config));
+}
+
+// 日志
 async function readLog() {
   if (!redis) return DEFAULT_LOG;
-  let log = await redis.get(LOG_KEY);
-  return log || DEFAULT_LOG;
+  let raw = await redis.get(LOG_KEY);
+  if (!raw) return DEFAULT_LOG;
+  try { return JSON.parse(raw); } catch { return DEFAULT_LOG; }
 }
 async function addLog(logItem) {
   if (!redis) return;
   let logList = await readLog();
   logList.unshift(logItem);
-  await redis.set(LOG_KEY, logList);
+  if (logList.length > 500) logList = logList.slice(0, 500);
+  await redis.set(LOG_KEY, JSON.stringify(logList));
 }
 async function clearAllLog() {
   if (!redis) return;
-  await redis.set(LOG_KEY, DEFAULT_LOG);
+  await redis.set(LOG_KEY, JSON.stringify(DEFAULT_LOG));
 }
 
-// 时间格式化：UTC 转为 YYYY-MM-DD HH:mm:ss
+// 时间格式化
 function formatUTCDate(date) {
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
@@ -88,7 +121,7 @@ function formatUTCDate(date) {
   return `${year}-${month}-${day} ${h}:${m}:${s}`;
 }
 
-// 工时数组对齐（增删工作项后统一数组长度）
+// 数组对齐
 function alignWorkArray(oldArr, newLen) {
   const res = [];
   for(let i = 0; i < newLen; i++){
@@ -101,7 +134,38 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
 
-// ========== 新增接口：读取/保存工作项列表 ==========
+// 工时配置接口 新增
+app.get('/api/getTimeConfig', async (req, res) => {
+  try {
+    const data = await readTimeConfig();
+    res.json({ code: 0, data });
+  } catch (e) {
+    res.json({ code: -1, data: DEFAULT_TIME_CONFIG });
+  }
+});
+app.post('/api/saveTimeConfig', async (req, res) => {
+  try {
+    const config = req.body;
+    await writeTimeConfig(config);
+    const now = new Date();
+    const timeStr = formatUTCDate(now);
+    await addLog({
+      time: timeStr,
+      logDate: "",
+      operator: "管理员",
+      operatorId: "admin",
+      type: "工时配置修改",
+      content: "修改每项工作单次耗时配置",
+      workDetail: ""
+    });
+    res.json({ code: 0, msg: "工时配置保存成功" });
+  } catch (e) {
+    console.error(e);
+    res.json({ code: -1, msg: "保存失败" });
+  }
+});
+
+// 工作项列表
 app.get('/api/getWorkList', async (req, res) => {
   try {
     const list = await readWorkList();
@@ -110,28 +174,24 @@ app.get('/api/getWorkList', async (req, res) => {
     res.json({ code: -1, list: DEFAULT_WORK_LIST });
   }
 });
-
 app.post('/api/saveWorkList', async (req, res) => {
   try {
     const { list } = req.body;
     if(!Array.isArray(list) || list.length === 0){
       return res.json({ code: 1, msg: "工作项列表不能为空" });
     }
-    // 读取原有数据，对齐所有员工历史工时数组长度
-    const data = await readData();
     const newLen = list.length;
+    const data = JSON.parse(JSON.stringify(await readData()));
 
     Object.values(data.workData).forEach(dayMap => {
       Object.keys(dayMap).forEach(dateKey => {
-        dayMap[dateKey] = alignWorkArray(dayMap[dateKey], newLen);
+        dayMap[dateKey] = alignWorkArray(dayMap[dateKey] || [], newLen);
       });
     });
 
-    // 保存新工作项 + 对齐后的数据
     await writeWorkList(list);
     await writeData(data);
 
-    // 记录日志
     const now = new Date();
     const timeStr = formatUTCDate(now);
     await addLog({
@@ -146,6 +206,7 @@ app.post('/api/saveWorkList', async (req, res) => {
 
     res.json({ code: 0, msg: "保存成功" });
   } catch (e) {
+    console.error("保存工作项失败：", e);
     res.json({ code: -1, msg: "保存失败" });
   }
 });
@@ -187,7 +248,7 @@ app.get('/api/getAllData', async (req, res) => {
   }
 });
 
-// 获取单个员工工时
+// 单个员工工时
 app.get('/api/getStaffWork/:staffId', async (req, res) => {
   try {
     const data = await readData();
@@ -197,7 +258,7 @@ app.get('/api/getStaffWork/:staffId', async (req, res) => {
   }
 });
 
-// 保存工时 + UTC 时间日志
+// 保存工时
 app.post('/api/saveWorkData', async (req, res) => {
   try {
     const data = await readData();
@@ -262,7 +323,7 @@ app.delete('/api/delStaff/:id', async (req, res) => {
   }
 });
 
-// 批量删除年月数据
+// 批量删除月份数据
 app.post('/api/admin/batchDeleteWork', async (req, res) => {
   try {
     const { username, pwd, staffId, year, month } = req.body;
@@ -307,7 +368,7 @@ app.post('/api/updateAdminPwd', async (req, res) => {
   }
 });
 
-// 管理员修改员工密码
+// 修改员工密码
 app.post('/api/admin/updateStaffPwd', async (req, res) => {
   try {
     const { username, pwd, staffId, newPwd } = req.body;
@@ -340,7 +401,7 @@ app.post('/api/admin/updateStaffPwd', async (req, res) => {
   }
 });
 
-// 获取日志（支持员工+日期筛选）
+// 获取日志
 app.post('/api/admin/getLog', async (req, res) => {
   try {
     const { username, pwd, filterStaffId, filterDate } = req.body;
@@ -363,7 +424,7 @@ app.post('/api/admin/getLog', async (req, res) => {
   }
 });
 
-// 清空全部日志
+// 清空日志
 app.post('/api/admin/clearLog', async (req, res) => {
   try {
     const { username, pwd } = req.body;
